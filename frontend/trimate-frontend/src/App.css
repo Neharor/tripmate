@@ -1,0 +1,265 @@
+/* 🌐 Global Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  background-color: #f9fafc;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* 🧭 Header */
+.header {
+  background-color: #0078ff;
+  color: #fff;
+  padding: 1.2rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.logo-title h1 {
+  margin-bottom: 0.2rem;
+  font-size: 1.6rem;
+}
+
+.logo-title p {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* 🔗 Navbar */
+nav.navbar {
+  display: flex;
+  margin-top: 0.5rem;
+}
+
+.nav-link {
+  margin: 0 12px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+  color: #d6e9ff;
+}
+
+/* 🗺️ Main Layout */
+.main-content {
+  display: flex;
+  gap: 2rem;
+  padding: 2rem;
+}
+
+/* ✈️ Planner Section */
+.planner-section {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* 🔍 Input Card */
+.input-card {
+  background: #fff;
+  padding: 22px;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.input-card:hover {
+  transform: translateY(-2px);
+}
+
+.input-card h2 {
+  margin-bottom: 1rem;
+  color: #0078ff;
+}
+
+.trip-input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+
+.input-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.plan-btn {
+  background-color: #0078ff;
+  color: white;
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.plan-btn:hover {
+  background-color: #005fcc;
+  transform: translateY(-1px);
+}
+
+.reset-btn {
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.reset-btn:hover {
+  background-color: #ddd;
+}
+
+/* 💡 Recommendations */
+.recommendations {
+  margin-top: 20px;
+}
+
+.rec-cards {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.rec-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 15px;
+  width: 190px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+  transition: transform 0.25s;
+}
+
+.rec-card:hover {
+  transform: translateY(-3px);
+}
+
+.rec-card img {
+  border-radius: 8px;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+.rec-type {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  color: white;
+}
+
+.rec-type.hotel { background: #ff7f50; }
+.rec-type.restaurant { background: #32cd32; }
+.rec-type.activity { background: #007bff; }
+
+/* 🧳 Itinerary Cards */
+.itinerary h2 {
+  margin-bottom: 1rem;
+  color: #0078ff;
+}
+
+.day-card {
+  background: #fff;
+  padding: 15px;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.day-card h3 {
+  margin-bottom: 0.5rem;
+  color: #444;
+}
+
+/* 📋 Sidebar */
+.sidebar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* 🔔 Notifications */
+.notifications {
+  background: #fff3cd;
+  padding: 15px 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.notifications h3 {
+  margin-bottom: 10px;
+  color: #856404;
+}
+
+.notifications ul {
+  padding-left: 20px;
+}
+
+.notifications li {
+  margin-bottom: 8px;
+}
+
+/* 🤖 AI Agent Diagram */
+.agent-diagram {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.diagram-box, .diagram-placeholder {
+  border: 2px dashed #007bff;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  font-style: italic;
+  color: #007bff;
+  margin-top: 10px;
+}
+
+/* ⚙️ Footer */
+.footer {
+  margin-top: 60px;
+  padding: 20px;
+  background: #f0f0f0;
+  color: #555;
+  text-align: center;
+}
+
+/* 📱 Responsive Design */
+@media (max-width: 1024px) {
+  .main-content {
+    flex-direction: column;
+  }
+  .sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 1rem;
+  }
+}
