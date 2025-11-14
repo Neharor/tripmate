@@ -1,6 +1,6 @@
-from base_agent import BaseAgent
-from destination import DestinationAgent
-from stays import StaysAgent
+from .base_agent import BaseAgent
+from .destination import DestinationAgent
+from .stays import StaysAgent
 # import other agents similarly
 
 class OrchestratorAgent(BaseAgent):
