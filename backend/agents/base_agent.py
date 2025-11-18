@@ -1,9 +1,44 @@
 from abc import ABC, abstractmethod
+from langchain_groq import ChatGroq
+from langchain.schema import HumanMessage, SystemMessage
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class BaseAgent(ABC):
-    def __init__(self, name):
+    """
+    Abstract base class for all AI agents using Groq (ultra-fast, free!)
+    """
+    def __init__(self, name, system_prompt=""):
         self.name = name
-
+        self.system_prompt = system_prompt
+        
+        # Initialize Groq - ultra fast and free!
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError(f"{self.name}: GROQ_API_KEY not found in environment variables")
+        
+        self.llm = ChatGroq(
+            model="llama-3.1-8b-instant",  # Ultra fast, free model
+            groq_api_key=api_key,
+            temperature=0.3,  # Lower for more focused output
+            max_tokens=1000,  # Increased for full itineraries
+            timeout=10  # Increased timeout for longer responses
+        )
+    
+    def _call_llm(self, user_message):
+        """
+        Internal method to call Groq AI via LangChain
+        """
+        messages = [
+            SystemMessage(content=self.system_prompt),
+            HumanMessage(content=user_message)
+        ]
+        
+        response = self.llm.invoke(messages)
+        return response.content
+    
     @abstractmethod
     def handle_request(self, input_data):
         """
@@ -11,3 +46,12 @@ class BaseAgent(ABC):
         Must be implemented by subclasses.
         """
         pass
+    
+    def format_response(self, data):
+        """
+        Format response in a consistent structure
+        """
+        return {
+            "agent": self.name,
+            "response": data
+        }

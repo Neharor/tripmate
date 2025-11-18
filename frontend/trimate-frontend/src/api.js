@@ -1,10 +1,16 @@
+// Generate a unique session ID for this browser session
+const SESSION_ID = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+
 export async function fetchItinerary(query) {
   const url = 'http://localhost:5002/api/generate';
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ 
+      query,
+      session_id: SESSION_ID 
+    }),
   });
 
   // If response is not OK try to read body (might contain JSON error message)
