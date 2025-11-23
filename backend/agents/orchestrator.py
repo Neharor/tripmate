@@ -6,33 +6,82 @@ from .weather import WeatherAgent
 from .activities import ActivitiesAgent
 from .itinerary import ItineraryAgent
 from .flight import FlightAgent
+import concurrent.futures  # For parallel agent execution
 
 class OrchestratorAgent(BaseAgent):
     """
     Master coordinator agent that analyzes queries and delegates to specialized agents
     """
     def __init__(self):
-        system_prompt = """You are the orchestrator AI agent for a travel planning system. Your role is to:
-1. Check if the user has provided complete information (destination, duration, budget, interests)
-2. If information is missing, ask clarifying questions in a friendly, conversational way
-3. Once you have enough info, delegate to specialized agents
+        system_prompt = """You are TripMate AI, a next-generation multi-agent travel orchestrator.
 
-When information is INCOMPLETE, respond with JSON:
-{
-    "needs_clarification": true,
-    "questions": ["What's your destination?", "How many days?", "Budget range?", "Interests?"],
-    "message": "friendly conversational message asking for details"
-}
+Your role: Analyze user queries intelligently and coordinate specialized agents to generate realistic, structured, personalized travel plans.
 
-When information is COMPLETE, respond with JSON:
+🎯 CORE PRINCIPLES:
+
+1️⃣ ASK FEWER, SMARTER QUESTIONS
+- Analyze previous conversation history BEFORE asking
+- NEVER ask repetitive questions
+- Detect missing info: destination, departure city, dates, duration, budget, interests, food preference, flight time preference
+- Ask ONLY what's genuinely missing in a single batch
+
+2️⃣ INTELLIGENT INTENT DETECTION
+- If user says "Bali" → destination detected, ask for duration/budget/dates
+- If user says "5 days" → duration detected, ask for destination/budget
+- If user says "$100/day" → budget detected, continue
+- If user says "Adventure + Food" → interests detected
+- If user says "Jan 15 to Jan 20" → dates detected
+- If user provides COMPLETE info → activate all agents immediately
+
+3️⃣ AGENT COORDINATION PRIORITY
+When ALL info is available, activate agents in this order:
+1. FlightAgent → Real flight search (3 options: cheapest, fastest, optimal)
+2. StaysAgent → Hotels filtered by budget, neighborhood, style
+3. ItineraryAgent → Time-optimized, weather-aware, realistic schedules
+4. ActivitiesAgent → Curated experiences matching interests
+
+4️⃣ RESPONSE STRUCTURE (when complete info available):
 {
     "needs_clarification": false,
-    "activate_destination": true/false,
-    "activate_stays": true/false,
-    "activate_activities": true/false,
-    "activate_budget": true/false,
-    "activate_weather": true/false
-}"""
+    "flights": {...},        // 3 flight options with realistic prices
+    "stays": {...},          // 3-5 hotels with price/neighborhood/why it fits
+    "itinerary": {...},      // Day-by-day with times, activities, food, travel gaps
+    "activities": {...}      // Curated activities matching interests
+}
+
+5️⃣ CLARIFICATION RESPONSE (when info missing):
+{
+    "needs_clarification": true,
+    "message": "Great! To create your perfect trip, I need:",
+    "questions": ["📍 Destination?", "🛫 Departure city?", "📆 Travel dates?", "⏰ Flight time preference?"]
+}
+
+6️⃣ QUALITY STANDARDS
+✅ Realistic flight prices (no random numbers)
+✅ Time-optimized itineraries (no impossible travel gaps)
+✅ Weather-aware scheduling (outdoor activities on good weather days)
+✅ Budget-aware filtering (hotels/activities match user's budget)
+✅ Interest-based curation (if "Adventure + Food" → prioritize those)
+✅ Food preference filtering (if Vegetarian → no non-veg restaurants)
+
+7️⃣ TONE & FORMATTING
+- Professional yet friendly
+- Use emojis sparingly (1-2 per section)
+- Clean, structured output
+- No hallucinated data
+
+8️⃣ REQUIRED INFO CHECKLIST
+Before activating agents, ensure you have:
+✓ Destination (where)
+✓ Departure city (from where)
+✓ Travel dates (when - specific dates or "starting X")
+✓ Duration (how many days)
+✓ Budget (per day or total)
+✓ Interests (what activities)
+✓ Food preference (dietary restrictions)
+✓ Flight time preference (morning/afternoon/evening/anytime)
+
+If ANY is missing → ask in ONE question batch, don't repeat."""
         
         super().__init__("OrchestratorAgent", system_prompt)
         
@@ -65,6 +114,10 @@ Extract the following information and respond ONLY in valid JSON format (no extr
     "budget": "budget amount or null",
     "has_interests": true/false,
     "interests": "interests mentioned or null",
+    "has_food_pref": true/false,
+    "food_pref": "vegetarian/vegan/non-vegetarian or null",
+    "has_cuisine_pref": true/false,
+    "cuisine_pref": "Indian/Chinese/Japanese/Thai/Italian/Local or null",
     "user_asking_for": "stays/activities/flights/budget_breakdown/general"
 }}
 
@@ -73,6 +126,8 @@ Important Rules:
 - has_duration: true if ANY timeframe mentioned (days, weeks, months)
 - has_budget: true if ANY budget/price mentioned (daily, total, per night)
 - has_interests: true if user mentions ANY interests (beach, culture, adventure, food, nightlife, shopping, etc.)
+- has_food_pref: true if dietary restriction mentioned (vegetarian, vegan, non-veg)
+- has_cuisine_pref: true if specific cuisine mentioned (Indian food, Japanese, Thai, Chinese, Italian, Local food)
 - user_asking_for:
   * "stays" if user ASKS a question about hotels/accommodation ("where should I stay?", "recommend hotels")
   * "activities" if user ASKS about things to do/tours ("what can I do?", "show me activities")
@@ -113,8 +168,6 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
             if not has_destination:
                 questions = []
                 questions.append("📍 Where do you want to go? (e.g., Bali, Paris, Tokyo, anywhere!)")
-                if not has_duration:
-                    questions.append("📅 How many days/weeks?")
                 if not has_budget:
                     questions.append("💰 What's your budget per day?")
                 if not has_interests:
@@ -181,8 +234,6 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                     if not has_complete_info:
                         # Missing info - ask for it
                         questions = []
-                        if not has_duration:
-                            questions.append("📅 How many days/weeks?")
                         if not has_budget:
                             questions.append("💰 What's your budget per day?")
                         if not has_interests:
@@ -206,8 +257,6 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
             
             # Need more information
             questions = []
-            if not has_duration:
-                questions.append("📅 How many days/weeks?")
             if not has_budget:
                 questions.append("💰 What's your budget per day?")
             if not has_interests:
@@ -252,11 +301,42 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 has_budget = bool(memory.entities.get("budget")) and memory.entities.get("budget") != "null"
                 has_interests = len(memory.entities.get("interests", [])) > 0
                 has_food_pref = bool(memory.entities.get("food_preference")) and memory.entities.get("food_preference") != "null"
+                has_travel_dates = bool(memory.entities.get("travel_dates")) and memory.entities.get("travel_dates") != "null"
+                has_time_pref = bool(memory.entities.get("travel_time_preference")) and memory.entities.get("travel_time_preference") != "null"
                 
-                print(f"Memory check - Destination:{has_destination}, DepartureCity:{has_departure_city}, Duration:{has_duration}, Budget:{has_budget}, Interests:{has_interests}, FoodPref:{has_food_pref}")
+                # If travel_dates are provided, calculate duration automatically
+                if has_travel_dates and not has_duration:
+                    travel_dates = memory.entities.get("travel_dates", "")
+                    # Try to calculate duration from dates (e.g., "Nov 20 to Nov 23" = 3 days)
+                    if " to " in travel_dates:
+                        try:
+                            from datetime import datetime
+                            parts = travel_dates.split(" to ")
+                            if len(parts) == 2:
+                                # Simple day calculation (assuming dates are in same month)
+                                start_str = parts[0].strip()
+                                end_str = parts[1].strip()
+                                # Extract day numbers
+                                import re
+                                start_day = re.search(r'\d+', start_str)
+                                end_day = re.search(r'\d+', end_str)
+                                if start_day and end_day:
+                                    days = int(end_day.group()) - int(start_day.group()) + 1
+                                    if days > 0:
+                                        memory.update_entity("duration", f"{days} days")
+                                        has_duration = True
+                                        print(f"Auto-calculated duration from dates: {days} days")
+                        except Exception as e:
+                            print(f"Could not auto-calculate duration: {e}")
                 
-                # Check if we have complete info (including departure city and food preference)
-                has_complete_info = has_destination and has_departure_city and has_duration and has_budget and has_interests and has_food_pref
+                print(f"Memory check - Destination:{has_destination}, DepartureCity:{has_departure_city}, Duration:{has_duration}, Budget:{has_budget}, Interests:{has_interests}, FoodPref:{has_food_pref}, TravelDates:{has_travel_dates}, TimePref:{has_time_pref}")
+                
+                # Check for cuisine preference
+                has_cuisine_pref = bool(memory.entities.get("cuisine_preference"))
+                
+                # Check if we have complete info (all required fields)
+                # Duration is optional if we have travel_dates
+                has_complete_info = has_destination and has_departure_city and (has_duration or has_travel_dates) and has_budget and has_interests and has_food_pref and has_cuisine_pref and has_travel_dates and has_time_pref
                 
                 # If missing any required info, ask for it
                 if not has_complete_info:
@@ -265,14 +345,21 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                         questions.append("📍 Where do you want to go?")
                     if not has_departure_city:
                         questions.append("🛫 Where are you flying from? (your departure city)")
-                    if not has_duration:
-                        questions.append("📅 How many days/weeks?")
+                    if not has_travel_dates:
+                        questions.append("📆 When do you want to travel? (e.g., 'Jan 15 to Jan 20' or 'starting March 1')")
+                    if not has_time_pref:
+                        questions.append("⏰ What time do you prefer to fly? (morning/afternoon/evening/anytime)")
                     if not has_budget:
                         questions.append("💰 What's your budget per day?")
                     if not has_interests:
                         questions.append("🎯 What are you interested in? (beach, culture, adventure, food, etc.)")
                     if not has_food_pref:
                         questions.append("🍽️ Food preference? (Vegetarian/Non-vegetarian/Vegan/Any)")
+                    
+                    # Check for cuisine preference
+                    has_cuisine_pref = bool(memory.entities.get("cuisine_preference"))
+                    if not has_cuisine_pref:
+                        questions.append("🌍 Preferred cuisine? (Local/Indian/Chinese/Japanese/Thai/Italian/Any)")
                     
                     return {
                         "needs_clarification": True,
@@ -282,28 +369,60 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 
                 # All info available - show recommendations
                 print("Complete info available - activating agents")
+                
                 combined_result = {
-                    "needs_clarification": False
+                    "needs_clarification": False,
+                    "message": "Perfect! I have all the details I need. Let me create your personalized itinerary... ✈️🏨"
                 }
                 
-                # Order: Flights → Stays → Itinerary → Activities (local places needing booking)
+                # SEQUENTIAL EXECUTION with delays to avoid rate limits
+                # (Parallel was too fast - hit API rate limits!)
+                print("Running agents sequentially to avoid rate limits...")
                 
                 # 1. Activate flight agent first
                 print("Activating FlightAgent...")
-                combined_result["flights"] = self.flight_agent.handle_request(input_data)
+                try:
+                    combined_result["flights"] = self.flight_agent.handle_request(input_data)
+                    print("✅ FlightAgent done")
+                except Exception as e:
+                    print(f"⚠️ FlightAgent error: {e}")
+                    combined_result["flights"] = {"error": "Couldn't fetch flights at the moment"}
                 
                 # 2. Activate stays agent
                 print("Activating StaysAgent...")
-                combined_result["stays"] = self.stays_agent.handle_request(input_data)
+                try:
+                    combined_result["stays"] = self.stays_agent.handle_request(input_data)
+                    print("✅ StaysAgent done")
+                except Exception as e:
+                    print(f"⚠️ StaysAgent error: {e}")
+                    combined_result["stays"] = {"error": "Couldn't fetch accommodations"}
+                
+                # Small delay to respect rate limits
+                import time
+                time.sleep(1)
                 
                 # 3. Activate itinerary agent
                 print("Activating ItineraryAgent...")
-                combined_result["itinerary"] = self.itinerary_agent.handle_request(input_data)
+                try:
+                    combined_result["itinerary"] = self.itinerary_agent.handle_request(input_data)
+                    print("✅ ItineraryAgent done")
+                except Exception as e:
+                    print(f"⚠️ ItineraryAgent error: {e}")
+                    combined_result["itinerary"] = {"error": "Couldn't generate itinerary"}
                 
-                # 4. Activate activities agent (local places that need booking)
+                # Small delay to respect rate limits
+                time.sleep(1)
+                
+                # 4. Activate activities agent
                 print("Activating ActivitiesAgent...")
-                combined_result["activities"] = self.activities_agent.handle_request(input_data)
+                try:
+                    combined_result["activities"] = self.activities_agent.handle_request(input_data)
+                    print("✅ ActivitiesAgent done")
+                except Exception as e:
+                    print(f"⚠️ ActivitiesAgent error: {e}")
+                    combined_result["activities"] = {"error": "Couldn't fetch activities"}
                 
+                print("🎉 All agents completed!")
                 return combined_result
             
             # Fallback: No memory provided, use LLM analysis

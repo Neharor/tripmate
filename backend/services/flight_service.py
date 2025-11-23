@@ -19,11 +19,18 @@ class FlightService:
         api_secret = os.getenv('AMADEUS_API_SECRET', '')
         
         if api_key and api_secret:
-            self.amadeus = Client(
-                client_id=api_key,
-                client_secret=api_secret
-            )
-            self.enabled = True
+            try:
+                self.amadeus = Client(
+                    client_id=api_key,
+                    client_secret=api_secret
+                )
+                self.enabled = True
+                print("✅ Amadeus API connected successfully!")
+                print(f"   API Key: {api_key[:8]}...")
+            except Exception as e:
+                print(f"❌ Amadeus API initialization failed: {e}")
+                self.amadeus = None
+                self.enabled = False
         else:
             print("⚠️  Amadeus API credentials not found. Flight search will use fallback mode.")
             print("   To enable real flights: Set AMADEUS_API_KEY and AMADEUS_API_SECRET environment variables")
@@ -85,23 +92,40 @@ class FlightService:
         itineraries = []
         for itinerary in offer['itineraries']:
             segments = []
+            total_duration_mins = self._parse_duration(itinerary['duration'])
+            
             for segment in itinerary['segments']:
+                airline_code = segment['carrierCode']
+                airline_name = self._get_airline_name(airline_code)
+                
                 segments.append({
-                    'airline': segment['carrierCode'],
-                    'flight_number': segment['number'],
+                    'airline': airline_code,
+                    'airline_name': airline_name,
+                    'flight_number': f"{airline_code} {segment['number']}",
                     'departure': {
                         'airport': segment['departure']['iataCode'],
-                        'time': segment['departure']['at']
+                        'time': segment['departure']['at'],
+                        'terminal': segment['departure'].get('terminal', '')
                     },
                     'arrival': {
                         'airport': segment['arrival']['iataCode'],
-                        'time': segment['arrival']['at']
+                        'time': segment['arrival']['at'],
+                        'terminal': segment['arrival'].get('terminal', '')
                     },
-                    'duration': segment['duration']
+                    'duration': segment['duration'],
+                    'aircraft': segment.get('aircraft', {}).get('code', 'Unknown')
                 })
+            
+            # Determine if direct flight
+            is_direct = len(segments) == 1
+            stops = len(segments) - 1
+            
             itineraries.append({
                 'segments': segments,
-                'duration': itinerary['duration']
+                'duration': itinerary['duration'],
+                'duration_mins': total_duration_mins,
+                'is_direct': is_direct,
+                'stops': stops
             })
         
         return {
@@ -109,8 +133,97 @@ class FlightService:
             'price': price,
             'currency': currency,
             'itineraries': itineraries,
-            'numberOfBookableSeats': offer.get('numberOfBookableSeats', 0)
+            'numberOfBookableSeats': offer.get('numberOfBookableSeats', 0),
+            'validatingAirlineCodes': offer.get('validatingAirlineCodes', []),
+            'is_real': True,  # Mark as real Amadeus data
+            'data_source': 'Amadeus API'
         }
+    
+    def _parse_duration(self, duration_str):
+        """
+        Parse ISO 8601 duration (e.g., 'PT2H30M') to minutes
+        """
+        import re
+        hours = 0
+        minutes = 0
+        
+        # Extract hours
+        hour_match = re.search(r'(\d+)H', duration_str)
+        if hour_match:
+            hours = int(hour_match.group(1))
+        
+        # Extract minutes
+        min_match = re.search(r'(\d+)M', duration_str)
+        if min_match:
+            minutes = int(min_match.group(1))
+        
+        return hours * 60 + minutes
+    
+    def _get_airline_name(self, code):
+        """
+        Map IATA airline codes to full names
+        """
+        airline_names = {
+            # Major Global Carriers
+            'SQ': 'Singapore Airlines',
+            'EK': 'Emirates',
+            'QR': 'Qatar Airways',
+            'TK': 'Turkish Airlines',
+            'NH': 'All Nippon Airways (ANA)',
+            'JL': 'Japan Airlines',
+            'KE': 'Korean Air',
+            'OZ': 'Asiana Airlines',
+            'CX': 'Cathay Pacific',
+            'BR': 'EVA Air',
+            
+            # US Carriers
+            'AA': 'American Airlines',
+            'DL': 'Delta Air Lines',
+            'UA': 'United Airlines',
+            'WN': 'Southwest Airlines',
+            'B6': 'JetBlue Airways',
+            'AS': 'Alaska Airlines',
+            
+            # European Carriers
+            'LH': 'Lufthansa',
+            'BA': 'British Airways',
+            'AF': 'Air France',
+            'KL': 'KLM Royal Dutch Airlines',
+            'IB': 'Iberia',
+            'AZ': 'ITA Airways',
+            'LX': 'Swiss International Air Lines',
+            'OS': 'Austrian Airlines',
+            
+            # Asian LCC & Regional
+            'AK': 'AirAsia',
+            'FD': 'Thai AirAsia',
+            'D7': 'AirAsia X',
+            'JT': 'Lion Air',
+            'GA': 'Garuda Indonesia',
+            'TG': 'Thai Airways',
+            'VN': 'Vietnam Airlines',
+            'CI': 'China Airlines',
+            'MH': 'Malaysia Airlines',
+            '3K': 'Jetstar Asia',
+            'TR': 'Scoot',
+            
+            # Middle East
+            'EY': 'Etihad Airways',
+            'WY': 'Oman Air',
+            'MS': 'EgyptAir',
+            
+            # Oceania
+            'QF': 'Qantas',
+            'NZ': 'Air New Zealand',
+            
+            # Others
+            'AI': 'Air India',
+            '6E': 'IndiGo',
+            'SG': 'SpiceJet',
+            'UK': 'Vistara'
+        }
+        
+        return airline_names.get(code, code)
     
     def _fallback_flights(self, origin, destination, departure_date, return_date=None):
         """

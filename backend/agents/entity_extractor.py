@@ -26,14 +26,44 @@ Your job: Identify and extract travel-related entities in JSON format."""
         """
         return self.extract_entities(input_data)
     
-    def extract_entities(self, conversation_text: str) -> dict:
+    def extract_entities(self, conversation_text: str, current_memory: dict = None) -> dict:
         """
         Extract entities from conversation using LLM
+        
+        Args:
+            conversation_text: Full conversation history
+            current_memory: Current semantic memory state (what's already known)
         """
         try:
+            # Build context about what's already known
+            memory_context = ""
+            if current_memory:
+                known_fields = []
+                if current_memory.get("destination"):
+                    known_fields.append(f"✅ Destination: {current_memory['destination']}")
+                if current_memory.get("departure_city"):
+                    known_fields.append(f"✅ Departure city: {current_memory['departure_city']}")
+                if current_memory.get("duration"):
+                    known_fields.append(f"✅ Duration: {current_memory['duration']}")
+                if current_memory.get("budget"):
+                    known_fields.append(f"✅ Budget: {current_memory['budget']}")
+                if current_memory.get("interests"):
+                    known_fields.append(f"✅ Interests: {current_memory['interests']}")
+                if current_memory.get("food_preference"):
+                    known_fields.append(f"✅ Food preference: {current_memory['food_preference']}")
+                if current_memory.get("cuisine_preference"):
+                    known_fields.append(f"✅ Cuisine preference: {current_memory['cuisine_preference']}")
+                if current_memory.get("travel_dates"):
+                    known_fields.append(f"✅ Travel dates: {current_memory['travel_dates']}")
+                if current_memory.get("travel_time_preference"):
+                    known_fields.append(f"✅ Flight time: {current_memory['travel_time_preference']}")
+                
+                if known_fields:
+                    memory_context = f"\n\n**ALREADY KNOWN (don't overwrite these):**\n" + "\n".join(known_fields)
+            
             extraction_prompt = f"""Extract travel information from this conversation:
 
-{conversation_text}
+{conversation_text}{memory_context}
 
 Return ONLY valid JSON with these fields:
 {{
@@ -44,19 +74,32 @@ Return ONLY valid JSON with these fields:
     "budget_type": "'daily' or 'total' or null",
     "interests": ["beach", "culture", etc.] or [],
     "food_preference": "'vegetarian', 'non-vegetarian', 'vegan', 'any' or null",
-    "travel_dates": "if mentioned, or null",
+    "cuisine_preference": "'Indian', 'Chinese', 'Japanese', 'Thai', 'Italian', 'Local cuisine', 'Any' or null",
+    "travel_dates": "e.g., '2025-12-25 to 2025-12-30', 'Jan 15 to Jan 20', 'starting March 1' or null",
+    "travel_time_preference": "'morning', 'afternoon', 'evening', 'anytime' or null",
     "companions": "'solo', 'couple', 'family', 'friends' or null"
 }}
 
-CRITICAL Rules:
-- Extract ONLY what's explicitly mentioned
-- Use null for missing information
-- budget_type: 'daily' if "per day" mentioned, 'total' otherwise
-- interests: extract ALL mentioned activities/preferences
-- food_preference: extract if user mentions veg/non-veg/vegan preferences
-- departure_city: Look at the CONTEXT! If the assistant JUST asked "Where are you flying from?" and user responds with a city name, that's the departure_city
-- If destination is already set and user mentions another city, that's likely the departure_city
-- If user updates info (e.g., changes budget), return the NEW value
+CRITICAL Rules for CONTEXT AWARENESS:
+1. **NEVER OVERWRITE ALREADY KNOWN FIELDS** - If a field is marked as "ALREADY KNOWN" above, YOU MUST return null for it. This is NON-NEGOTIABLE!
+   Example: If destination is ALREADY KNOWN as "Delhi", and user says "Tokyo", DO NOT change destination to Tokyo!
+2. **Look at what the assistant JUST asked:**
+   - If assistant asked "Where do you want to go?" → Next city = destination
+   - If assistant asked "Where are you flying from?" → Next city = departure_city (NOT destination)
+   - If assistant asked "When do you want to travel?" → Next answer = travel_dates
+   - If assistant asked "What time do you prefer to fly?" → Next answer = travel_time_preference
+   - If assistant asked "Food preference?" → Next answer = food_preference (Vegetarian/Non-vegetarian/Vegan/Any)
+   - If assistant asked "Preferred cuisine?" → Next answer = cuisine_preference (Indian/Chinese/Japanese/Thai/etc.)
+3. **Smart city detection - CRITICAL ORDER:**
+   - If destination is ALREADY SET → Return null for destination (DON'T CHANGE IT!)
+   - If destination is NOT set yet and user mentions a city → That's the destination (FIRST PRIORITY)
+   - If destination is ALREADY SET and user mentions a city → That's the departure_city
+   - DEFAULT: When in doubt, if it's early in conversation and only ONE city mentioned → It's the destination
+4. **Only extract NEW information** from the latest user message
+5. Use null for missing information
+6. If user updates info (e.g., changes budget), return the NEW value
+
+ABSOLUTE RULE: NEVER overwrite destination if it's already known! If user provides another city after destination is set, that city is departure_city!
 
 RESPOND WITH ONLY THE JSON OBJECT."""
 
@@ -94,6 +137,7 @@ RESPOND WITH ONLY THE JSON OBJECT."""
             "budget_type": None,
             "interests": [],
             "food_preference": None,
+            "cuisine_preference": None,
             "travel_dates": None,
             "companions": None
         }

@@ -1,0 +1,439 @@
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                        TRIPMATE DATA SOURCE ARCHITECTURE                          ║
+║                    Professor ke liye - Kahan se kya data aata hai                 ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                                 USER INPUT                                         │
+│               "Plan a trip to Goa from Tokyo, Nov 20-24, $100/day"                │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                          REACT FRONTEND (UI Layer)                                 │
+│                    Material-UI components, Chat interface                          │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                           FLASK BACKEND API                                        │
+│                        POST /api/generate (main.py)                                │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+                        ┌──────────────────────────┐
+                        │   ENTITY EXTRACTOR       │
+                        │   🤖 LLM: Groq AI 100%  │
+                        │   Model: llama-3.1-8b    │
+                        │   + Python Validation    │
+                        └──────────────────────────┘
+                                       ↓
+                    Extracts: destination, departure_city, dates,
+                             budget, interests, food_pref
+                                       ↓
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                          ORCHESTRATOR AGENT                                        │
+│                       🤖 LLM: Groq AI (llama-3.1-8b-instant)                      │
+│                                                                                    │
+│   Role: Query Analysis, Intent Detection, Agent Coordination                      │
+│                                                                                    │
+│   If incomplete info → Generate smart questions (LLM)                             │
+│   If complete info → Activate 4 agents in SEQUENTIAL execution                    │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+        ┌──────────────────────────────────────────────────────────────┐
+        │             SEQUENTIAL AGENT EXECUTION                        │
+        │         (1 second delay between each - rate limit)            │
+        └──────────────────────────────────────────────────────────────┘
+                 ↓              ↓              ↓              ↓
+        ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+        │  FLIGHT    │  │   STAYS    │  │ ITINERARY  │  │ ACTIVITIES │
+        │  AGENT     │  │   AGENT    │  │   AGENT    │  │   AGENT    │
+        └────────────┘  └────────────┘  └────────────┘  └────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                            FLIGHT AGENT - HYBRID
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              FlightAgent.handle_request()                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │   TRY: AMADEUS FLIGHT API        │
+                    │   ✈️ Real-time flight data       │
+                    └──────────────────────────────────┘
+                                       ↓
+                          Is Amadeus API working?
+                                    ┌─┴─┐
+                                YES │   │ NO
+                                    ↓   ↓
+        ┌────────────────────────┐           ┌───────────────────────┐
+        │  PRIMARY SOURCE:       │           │  FALLBACK SOURCE:     │
+        │  ✅ AMADEUS API        │           │  🤖 GROQ AI LLM      │
+        │                        │           │                       │
+        │  API Endpoint:         │           │  Model:               │
+        │  GET /v2/shopping/     │           │  llama-3.1-8b-instant │
+        │      flight-offers     │           │                       │
+        │                        │           │  Generates:           │
+        │  Authentication:       │           │  Realistic flight     │
+        │  OAuth 2.0             │           │  options with         │
+        │  API Key + Secret      │           │  prices, airlines     │
+        │                        │           │                       │
+        │  Returns:              │           │  Based on:            │
+        │  • Real flight prices  │           │  • Training data      │
+        │  • Airline codes       │           │  • Route patterns     │
+        │  • Departure times     │           │  • Typical prices     │
+        │  • Duration            │           │                       │
+        │  • Available seats     │           │                       │
+        │                        │           │                       │
+        │  Rate Limit:           │           │                       │
+        │  10 calls/sec (Test)   │           │                       │
+        │                        │           │                       │
+        │  Example Response:     │           │                       │
+        │  {                     │           │                       │
+        │    "price": "450.00",  │           │                       │
+        │    "carrier": "AI",    │           │                       │
+        │    "departure": "NRT", │           │                       │
+        │    "arrival": "GOI"    │           │                       │
+        │  }                     │           │                       │
+        └────────────────────────┘           └───────────────────────┘
+                    ↓                                   ↓
+        ┌────────────────────────┐           ┌───────────────────────┐
+        │  PROCESSING:           │           │  PROCESSING:          │
+        │  📝 Template-based     │           │  🤖 LLM generates     │
+        │      formatting        │           │      JSON structure   │
+        │  (NO LLM - Faster!)    │           │                       │
+        │                        │           │                       │
+        │  format_amadeus_       │           │  generate_llm_        │
+        │  flights()             │           │  fallback()           │
+        │                        │           │                       │
+        │  Python string         │           │  Groq API call        │
+        │  templates only        │           │                       │
+        └────────────────────────┘           └───────────────────────┘
+                    ↓                                   ↓
+                    └───────────────┬───────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+                    │  RETURN: Flight Options          │
+                    │  {                               │
+                    │    "flights": [...],             │
+                    │    "data_source": "amadeus_api"  │
+                    │                OR "llm_generated"│
+                    │  }                               │
+                    └──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                            STAYS AGENT - HYBRID
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              StaysAgent.handle_request()                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │   TRY: AMADEUS HOTEL API         │
+                    │   🏨 Real-time hotel data        │
+                    └──────────────────────────────────┘
+                                       ↓
+                          Is Amadeus API working?
+                                    ┌─┴─┐
+                                YES │   │ NO
+                                    ↓   ↓
+        ┌────────────────────────┐           ┌───────────────────────┐
+        │  PRIMARY SOURCE:       │           │  FALLBACK SOURCE:     │
+        │  ✅ AMADEUS API        │           │  🤖 GROQ AI LLM      │
+        │                        │           │                       │
+        │  API Endpoint:         │           │  Model:               │
+        │  GET /v3/shopping/     │           │  llama-3.1-8b-instant │
+        │      hotel-offers      │           │                       │
+        │                        │           │  Generates:           │
+        │  Returns:              │           │  Hotel recommendations│
+        │  • Hotel names         │           │  based on budget,     │
+        │  • Price per night     │           │  location, preferences│
+        │  • Locations           │           │                       │
+        │  • Ratings             │           │                       │
+        │  • Amenities           │           │                       │
+        │                        │           │                       │
+        │  Filters by:           │           │                       │
+        │  • Budget              │           │                       │
+        │  • Neighborhood        │           │                       │
+        │  • User preferences    │           │                       │
+        └────────────────────────┘           └───────────────────────┘
+                    ↓                                   ↓
+                    └───────────────┬───────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+                    │  RETURN: Hotel Options           │
+                    │  {                               │
+                    │    "stays": [...],               │
+                    │    "data_source": "amadeus_api"  │
+                    │                OR "llm_generated"│
+                    │  }                               │
+                    └──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                        ITINERARY AGENT - 100% LLM
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           ItineraryAgent.handle_request()                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  SOURCE: 🤖 GROQ AI LLM ONLY     │
+                    │  Model: llama-3.1-8b-instant     │
+                    │                                  │
+                    │  WHY LLM?                        │
+                    │  Complex reasoning needed:       │
+                    │  • Time optimization             │
+                    │  • Route planning (no zigzag)    │
+                    │  • Interest-based prioritization │
+                    │  • Budget allocation per day     │
+                    │  • Realistic scheduling          │
+                    │  • Travel time calculations      │
+                    │  • Queue/break considerations    │
+                    │                                  │
+                    │  NO API CALLS                    │
+                    │  NO ML MODELS                    │
+                    │  Pure AI reasoning               │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  INPUT TO LLM:                   │
+                    │  • Destination                   │
+                    │  • Duration (days)               │
+                    │  • User interests                │
+                    │  • Food preferences              │
+                    │  • Budget constraints            │
+                    │  • Weather data                  │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  LLM GENERATES:                  │
+                    │  Day 1: Ubud Adventure + Food    │
+                    │  09:00 — Arrival at DPS Airport  │
+                    │  10:30 — Check-in at hotel       │
+                    │  12:00 — Lunch at Warung Biah    │
+                    │  14:00 — Ubud Monkey Forest      │
+                    │  ...                             │
+                    │                                  │
+                    │  Structured JSON with:           │
+                    │  • Hourly schedule               │
+                    │  • Activities                    │
+                    │  • Meals (dietary filtered)      │
+                    │  • Travel times                  │
+                    │  • Costs                         │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  RETURN: Day-by-day itinerary    │
+                    │  100% LLM generated              │
+                    └──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                       ACTIVITIES AGENT - 100% LLM
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          ActivitiesAgent.handle_request()                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  SOURCE: 🤖 GROQ AI LLM ONLY     │
+                    │  Model: llama-3.1-8b-instant     │
+                    │                                  │
+                    │  WHY LLM?                        │
+                    │  Personalization needed:         │
+                    │  • Interest-based curation       │
+                    │  • Budget filtering              │
+                    │  • Dietary preferences           │
+                    │  • Activity type matching        │
+                    │  • Bookable vs free distinction  │
+                    │                                  │
+                    │  NO API CALLS                    │
+                    │  NO ML MODELS                    │
+                    │  Pure AI curation                │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  INPUT TO LLM:                   │
+                    │  • User interests (Adventure,    │
+                    │    Food, Shopping)               │
+                    │  • Budget                        │
+                    │  • Food/cuisine preferences      │
+                    │  • Destination                   │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  LLM CURATES:                    │
+                    │  🎯 White Water Rafting          │
+                    │     What: 2-hour jungle rapids   │
+                    │     Why: Perfect adventure       │
+                    │     Price: $35                   │
+                    │                                  │
+                    │  🎯 Balinese Cooking Class       │
+                    │     What: Market + cooking       │
+                    │     Why: Learn authentic dishes  │
+                    │     Price: $40                   │
+                    │                                  │
+                    │  Focus: BOOKABLE experiences     │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  RETURN: Curated activities      │
+                    │  100% LLM generated              │
+                    └──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                          FINAL OUTPUT TO USER
+═══════════════════════════════════════════════════════════════════════════════════
+
+                    ┌──────────────────────────────────┐
+                    │  COMBINED RESULT (JSON)          │
+                    │  {                               │
+                    │    "flights": {                  │
+                    │      "data_source": "amadeus_api"│  ← REAL API DATA
+                    │      "options": [...]            │
+                    │    },                            │
+                    │    "stays": {                    │
+                    │      "data_source": "amadeus_api"│  ← REAL API DATA
+                    │      "hotels": [...]             │
+                    │    },                            │
+                    │    "itinerary": {                │
+                    │      "days": [...]               │  ← LLM GENERATED
+                    │    },                            │
+                    │    "activities": {               │
+                    │      "bookable": [...]           │  ← LLM GENERATED
+                    │    }                             │
+                    │  }                               │
+                    └──────────────────────────────────┘
+                                       ↓
+                    ┌──────────────────────────────────┐
+                    │  REACT FRONTEND                  │
+                    │  Displays:                       │
+                    │  • Flight cards                  │
+                    │  • Hotel cards                   │
+                    │  • Day-by-day itinerary          │
+                    │  • Activity recommendations      │
+                    └──────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                        TECHNOLOGY STACK SUMMARY
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           APIS (Real-time Data)                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  Component      │  API                │  Status  │  Data Source                 │
+├─────────────────┼─────────────────────┼──────────┼──────────────────────────────┤
+│  Flights        │  ✅ Amadeus Flight  │  Active  │  Real-time flight prices     │
+│  Hotels         │  ✅ Amadeus Hotel   │  Active  │  Real-time hotel prices      │
+│  Weather        │  ⏳ OpenWeatherMap  │  Pending │  (Using LLM fallback)        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          LLM (AI Generation)                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  Component        │  LLM Model              │  Provider  │  Purpose             │
+├───────────────────┼─────────────────────────┼────────────┼──────────────────────┤
+│  Orchestrator     │  llama-3.1-8b-instant   │  Groq AI   │  Query analysis      │
+│  Flight Agent     │  llama-3.1-8b-instant   │  Groq AI   │  Fallback only       │
+│  Stays Agent      │  llama-3.1-8b-instant   │  Groq AI   │  Fallback only       │
+│  Weather Agent    │  llama-3.1-8b-instant   │  Groq AI   │  100% (current)      │
+│  Itinerary Agent  │  llama-3.1-8b-instant   │  Groq AI   │  100% (reasoning)    │
+│  Activities Agent │  llama-3.1-8b-instant   │  Groq AI   │  100% (curation)     │
+│  Entity Extractor │  llama-3.1-8b-instant   │  Groq AI   │  100% (extraction)   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      Machine Learning Models                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  Component        │  ML Model               │  Status                           │
+├───────────────────┼─────────────────────────┼───────────────────────────────────┤
+│  All Components   │  ❌ None                │  Not using custom ML models       │
+│                   │                         │  (Using LLM instead)              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                       PROFESSOR KE LIYE - KEY TAKEAWAYS
+═══════════════════════════════════════════════════════════════════════════════════
+
+📌 DATA SOURCE BREAKDOWN:
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  What Generated?     │  API?  │  LLM?  │  ML Model?  │  Source                  │
+├──────────────────────┼────────┼────────┼─────────────┼──────────────────────────┤
+│  Flight Prices       │   ✅   │   🔄   │     ❌      │  Amadeus API (primary)   │
+│  Hotel Prices        │   ✅   │   🔄   │     ❌      │  Amadeus API (primary)   │
+│  Weather Data        │   ⏳   │   ✅   │     ❌      │  LLM (OpenWeatherMap not │
+│                      │        │        │             │  configured)             │
+│  Itinerary Schedule  │   ❌   │   ✅   │     ❌      │  LLM 100%                │
+│  Activities List     │   ❌   │   ✅   │     ❌      │  LLM 100%                │
+│  Entity Extraction   │   ❌   │   ✅   │     ❌      │  LLM + Python validation │
+│  Questions           │   ❌   │   ✅   │     ❌      │  LLM 100%                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+Legend:
+✅ = Currently using
+🔄 = Fallback/secondary
+⏳ = Planned/not configured
+❌ = Not using
+
+
+📌 MACHINE LEARNING MODEL STATUS:
+   ❌ NOT using scikit-learn, TensorFlow, PyTorch, or any custom ML models
+   ✅ Using LLM (Large Language Model) - Groq AI (llama-3.1-8b-instant)
+   ✅ LLM is different from traditional ML models
+
+
+📌 PERFORMANCE METRICS:
+   Total Response Time: 30-40 seconds
+   ├─ Flight Search (Amadeus API): ~7 seconds
+   ├─ Hotel Search (Amadeus API): ~5 seconds
+   ├─ Itinerary Generation (LLM): ~10 seconds
+   ├─ Activities Generation (LLM): ~8 seconds
+   └─ Rate limit delays: 3 seconds (1s × 3)
+
+
+📌 SYSTEM ARCHITECTURE:
+   Frontend: React 19.2.0 + Material-UI
+   Backend: Python 3.9 + Flask (Port 5002)
+   LLM Provider: Groq AI (Free tier: 6000 tokens/min)
+   APIs: Amadeus (Test environment - Free tier)
+   Database: In-memory (No persistent storage)
+
+
+📌 PROFESSOR KO JAWAB:
+
+"Sir, humara system HYBRID hai:
+
+1. REAL-TIME DATA (APIs):
+   - Flights: Amadeus API se real prices ✅
+   - Hotels: Amadeus API se real prices ✅
+
+2. AI REASONING (LLM):
+   - Itinerary: LLM generates schedules ✅
+   - Activities: LLM curates experiences ✅
+   - Questions: LLM generates follow-ups ✅
+
+3. MACHINE LEARNING:
+   - Custom ML models: ❌ NAHI use kar rahe
+   - Using LLM instead (modern approach) ✅
+
+4. VALIDATION:
+   - Python rule-based logic ✅
+   - Entity extraction validation ✅"
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+                                  END OF DIAGRAM
+═══════════════════════════════════════════════════════════════════════════════════
+
+Created: November 21, 2025
+Version: 2.0
+Author: TripMate Development Team

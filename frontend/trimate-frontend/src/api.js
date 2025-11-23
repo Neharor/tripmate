@@ -1,8 +1,11 @@
+// API Base URL
+export const API_BASE_URL = 'http://localhost:5002';
+
 // Generate a unique session ID for this browser session
 const SESSION_ID = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
 
 export async function fetchItinerary(query) {
-  const url = 'http://localhost:5002/api/generate';
+  const url = `${API_BASE_URL}/api/generate`;
 
   const response = await fetch(url, {
     method: 'POST',

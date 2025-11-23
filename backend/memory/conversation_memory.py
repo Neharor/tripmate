@@ -34,7 +34,9 @@ class ConversationMemory:
             "budget_type": None,  # 'daily', 'total'
             "interests": [],
             "food_preference": None,  # vegetarian, non-vegetarian, vegan, any
+            "cuisine_preference": None,  # Indian, Chinese, Japanese, Thai, Italian, Local, Any
             "travel_dates": None,
+            "travel_time_preference": None,  # morning, afternoon, evening, anytime
             "companions": None,  # solo, couple, family, friends
             "accommodation_preferences": [],
             "activity_preferences": [],
