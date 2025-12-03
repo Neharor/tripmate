@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { fetchItinerary } from './api';
+import { fetchItinerary, API_BASE_URL } from './api';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
@@ -87,60 +87,76 @@ export default function ChatInterface({ onBackToHome }) {
   const [selectedInterests, setSelectedInterests] = React.useState([]);
   const [showInterestMultiSelect, setShowInterestMultiSelect] = React.useState(false);
   
+  // State for food and cuisine preferences
+  const [showFoodPreference, setShowFoodPreference] = React.useState(false);
+  const [showCuisinePreference, setShowCuisinePreference] = React.useState(false);
+  
+  // Track UI selections for conflict detection
+  const [uiSelections, setUiSelections] = React.useState({});
+  
   // Show welcome message on first load
   React.useEffect(() => {
     if (messages.length === 0) {
-      // Fetch welcome message with popular destinations from backend
-      const fetchWelcomeMessage = async () => {
-        try {
-          const response = await fetch('http://localhost:5002/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              query: "hello", 
-              session_id: sessionId 
-            })
-          });
-          
-          const data = await response.json();
-          
-          if (data.response) {
-            const welcomeMessage = {
-              message: data.response,
-              sentTime: formatTimestamp(),
-              sender: "TripMate",
-              direction: "incoming"
-            };
-            setMessages([welcomeMessage]);
-            setShowDestinationAutocomplete(true);
-          } else {
-            // Fallback to static message
-            const welcomeMessage = {
-              message: "👋 Welcome to TripMate! I'm your AI travel assistant.\n\nLet's plan your perfect trip! Where do you want to go?",
-              sentTime: formatTimestamp(),
-              sender: "TripMate",
-              direction: "incoming"
-            };
-            setMessages([welcomeMessage]);
-            setShowDestinationAutocomplete(true);
-          }
-        } catch (error) {
-          console.error('Error fetching welcome message:', error);
-          // Fallback to static message
-          const welcomeMessage = {
-            message: "👋 Welcome to TripMate! I'm your AI travel assistant.\n\nLet's plan your perfect trip! Where do you want to go?",
-            sentTime: formatTimestamp(),
-            sender: "TripMate",
-            direction: "incoming"
-          };
-          setMessages([welcomeMessage]);
-          setShowDestinationAutocomplete(true);
-        }
-      };
-      
-      fetchWelcomeMessage();
+      // Check if destination was selected from landing page
+      const selectedDestination = localStorage.getItem('selectedDestination');
+      if (selectedDestination) {
+        // Clear it from localStorage
+        localStorage.removeItem('selectedDestination');
+        // Set it as input value
+        setInputValue(selectedDestination);
+      } else {
+        // Fetch welcome message with popular destinations from backend
+        fetchWelcomeMessage();
+      }
     }
   }, []);
+
+  const fetchWelcomeMessage = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: "hello", 
+          session_id: sessionId 
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.response) {
+        const welcomeMessage = {
+          message: data.response,
+          sentTime: formatTimestamp(),
+          sender: "TripMate",
+          direction: "incoming"
+        };
+        setMessages([welcomeMessage]);
+        setShowDestinationAutocomplete(true);
+      } else {
+        // Fallback to static message
+        const welcomeMessage = {
+          message: "👋 Welcome to TripMate! I'm your AI travel assistant.\n\nLet's plan your perfect trip! Where do you want to go?",
+          sentTime: formatTimestamp(),
+          sender: "TripMate",
+          direction: "incoming"
+        };
+        setMessages([welcomeMessage]);
+        setShowDestinationAutocomplete(true);
+      }
+    } catch (error) {
+      console.error('Error fetching welcome message:', error);
+      // Fallback to static message
+      const welcomeMessage = {
+        message: "👋 Welcome to TripMate! I'm your AI travel assistant.\n\nLet's plan your perfect trip! Where do you want to go?",
+        sentTime: formatTimestamp(),
+        sender: "TripMate",
+        direction: "incoming"
+      };
+      setMessages([welcomeMessage]);
+      setShowDestinationAutocomplete(true);
+    }
+  };
   
   const formatTimestamp = () => {
     const now = new Date();
@@ -250,6 +266,20 @@ export default function ChatInterface({ onBackToHome }) {
       
       const data = rawMessage;
       
+      // Handle skip_recommendations (when user says "No" to saving trip)
+      if (data.skip_recommendations) {
+        // Clear options and pickers
+        setQuickOptions([]);
+        setShowDatePicker(false);
+        setShowInterestMultiSelect(false);
+        setShowDestinationAutocomplete(false);
+        
+        return {
+          type: 'text',
+          content: data.message || "No problem! Let me know if you'd like to plan a new trip. 🌍"
+        };
+      }
+      
       // Check if AI needs clarification
       if (data.needs_clarification) {
         // Extract destination from memory if available (for showing map with date picker)
@@ -257,6 +287,76 @@ export default function ChatInterface({ onBackToHome }) {
           setDestination(data.memory_entities.destination);
         }
         
+        // NEW: Handle structured form fields from backend
+        if (data.show_form_fields) {
+          console.log('📋 Showing form fields:', data.show_form_fields);
+          
+          // Determine which UI elements to show based on form field types
+          const fields = data.show_form_fields;
+          
+          if (fields.destination) {
+            setShowDestinationAutocomplete(true);
+            setShowDatePicker(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+            setQuickOptions([]);
+          } else if (fields.duration && fields.travel_dates) {
+            setShowDatePicker(true);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+            setQuickOptions(durationOptions);
+          } else if (fields.budget) {
+            // Show budget chips only
+            setQuickOptions(budgetOptions);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+          } else if (fields.interests) {
+            // Show interests multi-select
+            console.log('✅ Showing interests multi-select from show_form_fields');
+            setQuickOptions([]);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(true);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+          } else if (fields.food_preference) {
+            // Show food preference dropdown only
+            setQuickOptions([]);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(true);
+            setShowCuisinePreference(false);
+          } else if (fields.cuisine_preference) {
+            // Show cuisine preference dropdown only
+            setQuickOptions([]);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(true);
+          } else if (fields.departure_city) {
+            setShowDestinationAutocomplete(true);
+            setShowDatePicker(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+            setQuickOptions([]);
+          }
+          
+          return {
+            type: 'text',
+            content: '🤔 ' + (data.message || 'Let me help you plan your trip!')
+          };
+        }
+        
+        // LEGACY: Handle old question-based format
         let response = '🤔 ' + (data.message || 'I need more details to plan your trip!') + '\n\n';
         if (data.questions && Array.isArray(data.questions)) {
           response += 'Please tell me:\n';
@@ -467,8 +567,11 @@ export default function ChatInterface({ onBackToHome }) {
     
     setLoading(true);
     try {
-      const result = await fetchItinerary(query);
+      const result = await fetchItinerary(query, uiSelections);
       console.log('API result:', result);
+      
+      // Clear UI selections after sending (they've been used for this query)
+      setUiSelections({});
       
       const formattedMessage = formatMessage(result);
       
@@ -496,6 +599,11 @@ export default function ChatInterface({ onBackToHome }) {
   };
 
   const handleDateSelection = (dateString) => {
+    // Track UI selection
+    setUiSelections(prev => ({
+      ...prev,
+      travel_dates: dateString
+    }));
     // Automatically submit the selected dates
     handleSubmit({ preventDefault: () => {} }, dateString);
   };
@@ -701,7 +809,16 @@ export default function ChatInterface({ onBackToHome }) {
               <Chip
                 key={idx}
                 label={option}
-                onClick={(e) => handleSubmit(e, option)}
+                onClick={(e) => {
+                  // Track UI selection for budget options
+                  if (budgetOptions.includes(option)) {
+                    setUiSelections(prev => ({
+                      ...prev,
+                      budget: option
+                    }));
+                  }
+                  handleSubmit(e, option);
+                }}
                 sx={{
                   bgcolor: '#ffffff',
                   border: '1.5px solid #cbd5e1',
@@ -741,6 +858,11 @@ export default function ChatInterface({ onBackToHome }) {
           <DestinationAutocomplete 
             onSelect={(location) => {
               if (location && location.display) {
+                // Track UI selection
+                setUiSelections(prev => ({
+                  ...prev,
+                  destination: location.display
+                }));
                 handleSubmit(null, location.display);
                 setShowDestinationAutocomplete(false);
               }
@@ -826,6 +948,110 @@ export default function ChatInterface({ onBackToHome }) {
           >
             Done ({selectedInterests.length} selected)
           </Button>
+        </Box>
+      )}
+
+      {/* Food Preference Dropdown */}
+      {showFoodPreference && (
+        <Box sx={{
+          bgcolor: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          p: 2
+        }}>
+          <Typography variant="body2" sx={{ 
+            color: '#64748b', 
+            fontWeight: 600,
+            mb: 1.5
+          }}>
+            🍽️ Food Preference:
+          </Typography>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+            gap: 1
+          }}>
+            {foodPrefOptions.map((option, idx) => (
+              <Chip
+                key={idx}
+                label={option}
+                onClick={(e) => {
+                  handleSubmit(e, option);
+                  setShowFoodPreference(false);
+                }}
+                sx={{
+                  bgcolor: '#ffffff',
+                  border: '1.5px solid #cbd5e1',
+                  color: '#334155',
+                  fontWeight: 500,
+                  fontSize: '13px',
+                  height: 'auto',
+                  py: 1,
+                  px: 1.5,
+                  '&:hover': {
+                    bgcolor: '#10b981',
+                    color: '#ffffff',
+                    borderColor: '#10b981',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                  },
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Cuisine Preference Dropdown */}
+      {showCuisinePreference && (
+        <Box sx={{
+          bgcolor: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          p: 2
+        }}>
+          <Typography variant="body2" sx={{ 
+            color: '#64748b', 
+            fontWeight: 600,
+            mb: 1.5
+          }}>
+            🍜 Cuisine Preference:
+          </Typography>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+            gap: 1
+          }}>
+            {cuisineOptions.map((option, idx) => (
+              <Chip
+                key={idx}
+                label={option}
+                onClick={(e) => {
+                  handleSubmit(e, option);
+                  setShowCuisinePreference(false);
+                }}
+                sx={{
+                  bgcolor: '#ffffff',
+                  border: '1.5px solid #cbd5e1',
+                  color: '#334155',
+                  fontWeight: 500,
+                  fontSize: '13px',
+                  height: 'auto',
+                  py: 1,
+                  px: 1.5,
+                  '&:hover': {
+                    bgcolor: '#f59e0b',
+                    color: '#ffffff',
+                    borderColor: '#f59e0b',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                  },
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              />
+            ))}
+          </Box>
         </Box>
       )}
 

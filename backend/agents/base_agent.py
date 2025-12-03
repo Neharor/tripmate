@@ -14,7 +14,7 @@ class BaseAgent(ABC):
         self.name = name
         self.system_prompt = system_prompt
         
-        # Initialize Groq - ultra fast and free!
+        # Initialize Groq 
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError(f"{self.name}: GROQ_API_KEY not found in environment variables")

@@ -1,193 +1,112 @@
 from .base_agent import BaseAgent
-import json
+from services.activities_service import activities_service
+import re
 
 class ActivitiesAgent(BaseAgent):
     """
     Specialized agent for recommending LOCAL PLACES TO VISIT that need booking (tours, attractions, etc.)
-    This is shown AFTER the itinerary as additional bookable experiences.
+    Uses real API data from GetYourGuide, Viator, or curated database.
     """
     def __init__(self):
         system_prompt = """You are TripMate's Experience Curator.
 
-MISSION: Recommend curated, bookable activities that match user interests and enhance their trip.
-
-🎯 ACTIVITY CURATION RULES:
-
-1️⃣ INTEREST-BASED SELECTION:
-If user says "Adventure + Food":
-✅ 60% adventure: Hiking, diving, rafting, paragliding
-✅ 40% food: Cooking classes, food tours, wine tasting
-
-If user says "Beach":
-✅ 70% beach/water: Snorkeling, surfing, boat tours, beach clubs
-✅ 30% relaxation: Spa, sunset cruise
-
-If user says "Culture":
-✅ 80% cultural: Museums, temples, historical tours, workshops
-✅ 20% local life: Markets, neighborhoods, traditional shows
-
-2️⃣ SPECIFIC & CURATED (Not Generic):
-❌ Bad: "Visit temples"
-✅ Good: "🛕 Tanah Lot Sunset Temple - Iconic sea temple, best at sunset - $5"
-
-❌ Bad: "Try local food"
-✅ Good: "🍜 Bali Food Safari - 4-hour street food tour, 10+ tastings - $45"
-
-3️⃣ BOOKABLE EXPERIENCES ONLY:
-Focus on activities that need:
-- Advance booking (tours, classes)
-- Tickets (attractions, shows)
-- Reservations (experiences, activities)
-
-4️⃣ CLEAN FORMAT:
-
-🎯 [Specific Activity Name]
-   What: [1-sentence description]
-   Why: [Why it matches their interests]
-   Price: $[Amount]
-
-EXAMPLE (if interest "Adventure + Food"):
-
-🎯 White Water Rafting - Ayung River
-   What: 2-hour rafting through jungle rapids + lunch
-   Why: Perfect adventure with scenic views
-   Price: $35
-
-🎯 Balinese Cooking Class at Paon Bali
-   What: Market visit + hands-on cooking + recipes
-   Why: Learn authentic dishes, take skills home
-   Price: $40
-
-🎯 Mount Batur Sunrise Hike
-   What: 4 AM start, summit for sunrise + breakfast
-   Why: Epic adventure with volcano views
-   Price: $30
-
-🎯 Ubud Food Walking Tour
-   What: 3-hour tour, 8 local eateries + guide
-   Why: Discover hidden food gems with stories
-   Price: $45
-
-5️⃣ BUDGET-AWARE:
-- Stay within daily budget
-- Show mix of price points
-- Prioritize value for money
-- Skip overpriced tourist traps
-
-6️⃣ RELEVANCE OVER QUANTITY:
-✅ 4-5 perfect matches
-❌ 10+ generic suggestions
-
-7️⃣ WEATHER CONSIDERATION:
-- Outdoor activities → Good weather seasons
-- Indoor (museums, classes) → Any weather
-- Water activities → Check season
-
-8️⃣ NEVER:
-❌ Generic lists ("visit beach", "try food")
-❌ Activities not matching interests
-❌ Overpriced tourist traps
-❌ Impossible activities (no snorkeling in landlocked cities)
-❌ Fake experience names"""
+MISSION: Recommend curated, bookable activities that match user interests."""
         
         super().__init__("ActivitiesAgent", system_prompt)
 
     def handle_request(self, input_data):
         """
-        Process user query and return activity recommendations
+        Process user query and return activity recommendations from API/database
         """
         try:
-            # Extract context from input
             input_lower = input_data.lower()
             
-            # Extract destination from context
-            destination = "this destination"
-            if 'bali' in input_lower:
-                destination = "Bali"
-            elif 'bangkok' in input_lower:
-                destination = "Bangkok"
-            elif 'paris' in input_lower:
-                destination = "Paris"
-            elif 'tokyo' in input_lower:
-                destination = "Tokyo"
-            elif 'rome' in input_lower:
-                destination = "Rome"
+            # Extract destination, interests, and budget
+            destination = self._extract_destination(input_lower)
+            interests = self._extract_interests(input_lower)
+            budget = self._extract_budget(input_lower)
             
-            # Extract budget context if mentioned
-            budget_conscious = any(word in input_lower for word in ['budget', 'cheap', 'affordable', 'free', 'low cost'])
+            # Search for real activities using the service
+            activities_list = activities_service.search_activities(
+                destination=destination,
+                interests=interests,
+                budget=budget,
+                limit=5
+            )
             
-            # Extract interests from context
-            interests = []
-            if 'beach' in input_lower or 'swim' in input_lower or 'surf' in input_lower:
-                interests.append('beach activities')
-            if 'food' in input_lower or 'eat' in input_lower or 'culinary' in input_lower:
-                interests.append('food experiences')
-            if 'culture' in input_lower or 'temple' in input_lower or 'museum' in input_lower:
-                interests.append('cultural sites')
-            if 'adventure' in input_lower or 'hiking' in input_lower or 'trek' in input_lower:
-                interests.append('adventure activities')
-            if 'night' in input_lower or 'bar' in input_lower or 'club' in input_lower:
-                interests.append('nightlife')
-            
-            # Build the prompt for BOOKABLE local places
-            if budget_conscious:
-                user_prompt = f"""User wants BUDGET-FRIENDLY bookable experiences in {destination}.
-
-Recommend 4-5 affordable tours/attractions that need advance booking. Format each as:
-
-� Experience Name - Brief description, why book it ($price range)
-
-Examples:
-� Ubud Rice Terrace Walk - Guided tour of iconic terraces, skip-the-line entry ($15-25)
-� Snorkeling at Blue Lagoon - Equipment included, boat trip ($20-30)
-🎫 Traditional Cooking Class - 3-hour class, market visit included ($25-35)
-
-CRITICAL: Focus on BOOKABLE experiences under $50. Include specific names and prices."""
-            elif interests:
-                interest_str = ', '.join(interests)
-                user_prompt = f"""User wants bookable experiences in {destination} focused on: {interest_str}
-
-Recommend 4-5 tours/attractions based on their interests. Format each as:
-
-� Experience Name - Brief description, why book it ($price range)
-
-Examples:
-� Sunset Cruise & Dinner - Private boat, 3 hours, dinner included ($60-80)
-� Scuba Diving Certification - 2-day course, equipment provided ($200-250)
-🎫 Street Food Walking Tour - 3 hours, 8+ tastings, local guide ($40-60)
-
-CRITICAL: Match to interests: {interest_str}. Include specific names and prices."""
-            else:
-                user_prompt = f"""Based on: {input_data}
-
-Recommend 4-5 TOP bookable experiences in {destination} that tourists should pre-book. Format each as:
-
-� Experience Name - Brief description, why book it ($price range)
-
-Examples:
-� Tanah Lot Temple Sunset Tour - Skip lines, guided tour, sunset views ($30-45)
-� Mount Batur Sunrise Trek - 4am start, breakfast at summit, guide included ($40-60)
-🎫 Spa & Wellness Package - 2-hour treatment, massage + facial ($50-80)
-
-CRITICAL: ONLY experiences that need advance booking. Include specific names and prices."""
-
-            llm_response = self._call_llm(user_prompt)
-            
-            # Strip any JSON formatting
-            clean_response = llm_response.replace('```json', '').replace('```', '').strip()
-            
-            # Split into individual activities if formatted as a list
-            activities = [line.strip() for line in clean_response.split('\n') if line.strip() and line.strip().startswith(('�', '�🎯', '🌊', '🍜', '🏛️', '🚶', '•', '-'))]
-            
-            if not activities:
-                activities = [clean_response]
+            # Format activities for display
+            formatted_activities = self._format_activities(activities_list)
             
             return {
-                "activities": activities
+                "activities": formatted_activities,
+                "destination": destination,
+                "count": len(formatted_activities),
+                "data_source": "real_api" if activities_list and activities_list[0].get('data_source') == 'api' else 'curated_database'
             }
             
         except Exception as e:
             print(f"ActivitiesAgent error: {str(e)}")
             return {
-                "activities": [f"Error getting activities: {str(e)}"]
+                "activities": [f"Error getting activities: {str(e)}"],
+                "error": True
             }
+    
+    def _extract_destination(self, input_lower: str) -> str:
+        """Extract destination from user input"""
+        destinations = {
+            'bali': 'Bali',
+            'bangkok': 'Bangkok',
+            'paris': 'Paris',
+            'tokyo': 'Tokyo',
+            'rome': 'Rome'
+        }
+        
+        for key, value in destinations.items():
+            if key in input_lower:
+                return value
+        
+        return "this destination"
+    
+    def _extract_interests(self, input_lower: str) -> list:
+        """Extract interests from user input"""
+        interests_map = {
+            'beach': ['water', 'sightseeing'],
+            'food': ['food', 'dining'],
+            'culture': ['culture'],
+            'adventure': ['adventure'],
+            'night': ['nightlife']
+        }
+        
+        interests = []
+        for keyword, categories in interests_map.items():
+            if keyword in input_lower:
+                interests.extend(categories)
+        
+        return list(set(interests))
+    
+    def _extract_budget(self, input_lower: str) -> str:
+        """Extract budget from user input"""
+        matches = re.findall(r'\$(\d+)|(\d+)\s*(?:dollars?|per day|daily)', input_lower)
+        if matches:
+            for match in matches:
+                amount = match[0] if match[0] else match[1]
+                if amount:
+                    return f"${amount}"
+        return None
+    
+    def _format_activities(self, activities_list: list) -> list:
+        """Format activities for display"""
+        formatted = []
+        
+        for activity in activities_list:
+            formatted_activity = f"""🎯 {activity.get('name', 'Activity')}
+   What: {activity.get('description', '')}
+   Why: {activity.get('reason', '')}
+   Price: {activity.get('price_range', 'Contact for pricing')}"""
+            
+            if activity.get('rating'):
+                formatted_activity += f"\n   Rating: ⭐ {activity.get('rating')}/5 ({activity.get('reviews', 0)} reviews)"
+            
+            formatted.append(formatted_activity)
+        
+        return formatted

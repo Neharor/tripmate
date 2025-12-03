@@ -39,6 +39,13 @@ def signup():
     }
     """
     try:
+        # Check if database is available
+        if user_model is None:
+            return jsonify({
+                "error": "Database unavailable. User registration is temporarily disabled.",
+                "details": "MongoDB connection failed. Please contact support."
+            }), 503
+        
         data = request.get_json()
         
         # Validate input

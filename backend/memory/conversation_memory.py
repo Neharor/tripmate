@@ -55,6 +55,9 @@ class ConversationMemory:
         # EPISODIC MEMORY: Specific events/interactions
         self.episodes = []
         
+        # CONTEXT: Additional runtime context (UI selections, etc.)
+        self.context = {}
+        
         # Metadata
         self.created_at = datetime.utcnow()
         self.last_updated = datetime.utcnow()
@@ -74,6 +77,13 @@ class ConversationMemory:
             self.short_term = self.short_term[-self.max_short_term:]
         
         self.last_updated = datetime.utcnow()
+    
+    def get_context(self) -> Dict[str, Any]:
+        """
+        Get runtime context dictionary (for UI selections, temporary state, etc.)
+        Returns mutable dictionary that can be updated directly
+        """
+        return self.context
     
     def update_entity(self, entity_type: str, value: Any, append: bool = False):
         """

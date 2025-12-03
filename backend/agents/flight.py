@@ -101,12 +101,15 @@ MISSION: Provide 3 realistic flight options: Cheapest, Fastest, and Best Overall
         self.flight_service = FlightService()
         self.route_intelligence = RouteIntelligence()
         
-        # Initialize ML predictor
+        # Initialize ML predictor (disabled for now due to NumPy compatibility issues)
+        self.predictor = None
         if ML_ENABLED:
-            self.predictor = get_predictor()
-            print("✓ ML price predictor initialized")
-        else:
-            self.predictor = None
+            try:
+                self.predictor = get_predictor()
+                print("✓ ML price predictor initialized")
+            except Exception as e:
+                print(f"⚠️ ML predictor initialization failed: {e}")
+                self.predictor = None
     
     def handle_request(self, input_data):
         """

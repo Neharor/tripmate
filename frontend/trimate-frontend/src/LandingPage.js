@@ -14,8 +14,15 @@ import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SpeedIcon from '@mui/icons-material/Speed';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DestinationCarousel from './components/DestinationCarousel';
+import './styles/carousel.css';
 
-export default function LandingPage({ onStartPlanning }) {
+export default function LandingPage({ onStartPlanning, onViewTrips }) {
+  const handleDestinationSelect = (destination) => {
+    // Store destination and navigate to chat
+    localStorage.setItem('selectedDestination', destination);
+    onStartPlanning();
+  };
   const features = [
     {
       icon: <SmartToyIcon sx={{ fontSize: 48, color: '#3b82f6' }} />,
@@ -107,6 +114,32 @@ export default function LandingPage({ onStartPlanning }) {
         }} />
 
         <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+          {/* My Trips Button - Top Right */}
+          <Box sx={{ position: 'absolute', top: 20, right: 20 }}>
+            <Button
+              variant="contained"
+              onClick={() => onViewTrips && onViewTrips()}
+              sx={{
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                color: '#ffffff',
+                px: 3,
+                py: 1.5,
+                borderRadius: '25px',
+                textTransform: 'none',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                fontWeight: 600,
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                  transform: 'translateY(-2px)',
+                },
+                transition: 'all 0.3s'
+              }}
+            >
+              🗺️ My Trips
+            </Button>
+          </Box>
+
           <Box sx={{ textAlign: 'center', maxWidth: '800px', mx: 'auto' }}>
             <Typography
               variant="h1"
@@ -161,7 +194,7 @@ export default function LandingPage({ onStartPlanning }) {
               <Button
                 variant="outlined"
                 size="large"
-                onClick={() => document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => onStartPlanning && typeof onStartPlanning === 'function' ? onStartPlanning() : window.location.href = '/trips'}
                 sx={{
                   borderColor: '#ffffff',
                   color: '#ffffff',
@@ -202,6 +235,9 @@ export default function LandingPage({ onStartPlanning }) {
           </Box>
         </Container>
       </Box>
+
+      {/* Destination Carousel Section */}
+      <DestinationCarousel onDestinationSelect={handleDestinationSelect} />
 
       {/* Features Section */}
       <Container maxWidth="lg" sx={{ py: 12 }}>

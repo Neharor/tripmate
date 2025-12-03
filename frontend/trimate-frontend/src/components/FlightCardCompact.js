@@ -95,7 +95,7 @@ export default function FlightCardCompact({ flights, departureCity, destination,
             </Box>
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="h4" sx={{ color: '#16a34a', fontWeight: 800, fontSize: '28px', lineHeight: 1 }}>
-                ${flight.price_round_trip || flight.price_one_way * 2}
+                {(flight.price_round_trip || flight.price_one_way * 2)?.toString().startsWith('$') ? (flight.price_round_trip || flight.price_one_way * 2) : `$${flight.price_round_trip || flight.price_one_way * 2}`}
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
                 round trip
@@ -189,7 +189,7 @@ export default function FlightCardCompact({ flights, departureCity, destination,
             </Button>
             
             <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#64748b', mt: 1.5 }}>
-              💳 Pay directly to airline • Instant confirmation • ${flight.price_one_way || Math.round(flight.price_round_trip / 2)} one-way
+              💳 Pay directly to airline • Instant confirmation • {(flight.price_one_way || Math.round(flight.price_round_trip / 2))?.toString().startsWith('$') ? (flight.price_one_way || Math.round(flight.price_round_trip / 2)) : `$${flight.price_one_way || Math.round(flight.price_round_trip / 2)}`} one-way
             </Typography>
           </Box>
         </Card>

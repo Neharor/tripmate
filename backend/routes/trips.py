@@ -47,9 +47,20 @@ def create_trip():
         
         # Convert date strings to datetime objects
         if 'start_date' in trip_data and isinstance(trip_data['start_date'], str):
-            trip_data['start_date'] = datetime.fromisoformat(trip_data['start_date'].replace('Z', '+00:00'))
+            try:
+                # Try ISO format first
+                trip_data['start_date'] = datetime.fromisoformat(trip_data['start_date'].replace('Z', '+00:00'))
+            except ValueError:
+                # Try parsing common formats like "Nov 25", "Nov 25 2025", etc.
+                from dateutil import parser
+                trip_data['start_date'] = parser.parse(trip_data['start_date'])
+        
         if 'end_date' in trip_data and isinstance(trip_data['end_date'], str):
-            trip_data['end_date'] = datetime.fromisoformat(trip_data['end_date'].replace('Z', '+00:00'))
+            try:
+                trip_data['end_date'] = datetime.fromisoformat(trip_data['end_date'].replace('Z', '+00:00'))
+            except ValueError:
+                from dateutil import parser
+                trip_data['end_date'] = parser.parse(trip_data['end_date'])
         
         # Create trip
         trip = trip_model.create_trip(user_id, trip_data)
@@ -108,7 +119,9 @@ def get_trips():
                 },
                 "budget": trip.get('budget', {}),
                 "status": trip['metadata']['trip_status'],
-                "created_at": trip['created_at'].isoformat()
+                "created_at": trip['created_at'].isoformat(),
+                "itinerary": trip.get('itinerary', []),
+                "interests": trip.get('preferences', {}).get('interests', [])
             })
         
         return jsonify({
@@ -118,7 +131,12 @@ def get_trips():
         
     except Exception as e:
         print(f"❌ Error getting trips: {str(e)}")
-        return jsonify({"error": f"Failed to get trips: {str(e)}"}), 500
+        # Return empty array instead of error to avoid breaking frontend
+        return jsonify({
+            "trips": [],
+            "count": 0,
+            "error": "Database connection issue. Please try again later."
+        }), 200
 
 
 @trips_bp.route('/<trip_id>', methods=['GET'])

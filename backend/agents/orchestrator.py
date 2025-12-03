@@ -1,98 +1,71 @@
 from .base_agent import BaseAgent
 from .destination import DestinationAgent
 from .stays import StaysAgent
-from .budget import BudgetAgent
-from .weather import WeatherAgent
 from .activities import ActivitiesAgent
-from .itinerary import ItineraryAgent
 from .flight import FlightAgent
-import concurrent.futures  # For parallel agent execution
+from .local_events import LocalEventsAgent
 
 class OrchestratorAgent(BaseAgent):
     """
     Master coordinator agent that analyzes queries and delegates to specialized agents
     """
     def __init__(self):
-        system_prompt = """You are TripMate AI, a next-generation multi-agent travel orchestrator.
+        system_prompt = """You are TripMate AI, a smart travel planning assistant powered by 4 specialized agents.
 
-Your role: Analyze user queries intelligently and coordinate specialized agents to generate realistic, structured, personalized travel plans.
+Your role: Analyze user queries and coordinate agents to create personalized travel plans.
 
 🎯 CORE PRINCIPLES:
 
-1️⃣ ASK FEWER, SMARTER QUESTIONS
-- Analyze previous conversation history BEFORE asking
+1️⃣ SMART QUESTIONING
+- Analyze conversation history BEFORE asking
 - NEVER ask repetitive questions
-- Detect missing info: destination, departure city, dates, duration, budget, interests, food preference, flight time preference
-- Ask ONLY what's genuinely missing in a single batch
+- Detect missing info: destination, departure city, dates, duration, budget, interests, food/cuisine preferences, flight time
+- Ask ONLY what's missing in a single batch
 
 2️⃣ INTELLIGENT INTENT DETECTION
-- If user says "Bali" → destination detected, ask for duration/budget/dates
-- If user says "5 days" → duration detected, ask for destination/budget
-- If user says "$100/day" → budget detected, continue
-- If user says "Adventure + Food" → interests detected
-- If user says "Jan 15 to Jan 20" → dates detected
-- If user provides COMPLETE info → activate all agents immediately
+- "Bali" → destination detected
+- "5 days" → duration detected  
+- "$100/day" → budget detected
+- "Adventure + Food" → interests detected
+- "Jan 15 to Jan 20" → dates detected
+- Complete info → activate all agents
 
-3️⃣ AGENT COORDINATION PRIORITY
-When ALL info is available, activate agents in this order:
-1. FlightAgent → Real flight search (3 options: cheapest, fastest, optimal)
-2. StaysAgent → Hotels filtered by budget, neighborhood, style
-3. ItineraryAgent → Time-optimized, weather-aware, realistic schedules
-4. ActivitiesAgent → Curated experiences matching interests
+3️⃣ AGENT COORDINATION (5 AGENTS - INCLUDING UNIQUE FEATURE)
+When all info is available:
+1. FlightAgent → Real flight search via Amadeus API (3 options)
+2. StaysAgent → Hotels via LLM (budget-filtered, interest-based)
+3. ActivitiesAgent → Curated experiences via LLM (interest-matched)
+4. DestinationAgent → Suggestions with Kaggle trending data
+5. LocalEventsAgent → 🌟 UNIQUE: Real events happening during travel dates (festivals, markets, concerts)
 
-4️⃣ RESPONSE STRUCTURE (when complete info available):
-{
-    "needs_clarification": false,
-    "flights": {...},        // 3 flight options with realistic prices
-    "stays": {...},          // 3-5 hotels with price/neighborhood/why it fits
-    "itinerary": {...},      // Day-by-day with times, activities, food, travel gaps
-    "activities": {...}      // Curated activities matching interests
-}
-
-5️⃣ CLARIFICATION RESPONSE (when info missing):
-{
-    "needs_clarification": true,
-    "message": "Great! To create your perfect trip, I need:",
-    "questions": ["📍 Destination?", "🛫 Departure city?", "📆 Travel dates?", "⏰ Flight time preference?"]
-}
-
-6️⃣ QUALITY STANDARDS
-✅ Realistic flight prices (no random numbers)
-✅ Time-optimized itineraries (no impossible travel gaps)
-✅ Weather-aware scheduling (outdoor activities on good weather days)
-✅ Budget-aware filtering (hotels/activities match user's budget)
-✅ Interest-based curation (if "Adventure + Food" → prioritize those)
-✅ Food preference filtering (if Vegetarian → no non-veg restaurants)
-
-7️⃣ TONE & FORMATTING
-- Professional yet friendly
-- Use emojis sparingly (1-2 per section)
-- Clean, structured output
-- No hallucinated data
-
-8️⃣ REQUIRED INFO CHECKLIST
-Before activating agents, ensure you have:
+4️⃣ REQUIRED INFO CHECKLIST
 ✓ Destination (where)
 ✓ Departure city (from where)
-✓ Travel dates (when - specific dates or "starting X")
+✓ Travel dates (when)
 ✓ Duration (how many days)
-✓ Budget (per day or total)
-✓ Interests (what activities)
-✓ Food preference (dietary restrictions)
+✓ Budget (per day)
+✓ Interests (activities)
+✓ Food preference (dietary)
+✓ Cuisine preference (food type)
 ✓ Flight time preference (morning/afternoon/evening/anytime)
 
-If ANY is missing → ask in ONE question batch, don't repeat."""
+5️⃣ QUALITY STANDARDS
+✅ Real flight prices (Amadeus API)
+✅ LLM-generated hotels/activities
+✅ Budget-aware filtering
+✅ Interest-based curation
+✅ No hardcoded data
+
+If ANY required info is missing → ask in ONE batch, don't repeat."""
         
         super().__init__("OrchestratorAgent", system_prompt)
         
-        # Initialize all specialized agents
+        # Initialize specialized agents (5 agents including unique LocalEventsAgent)
         self.destination_agent = DestinationAgent()
+        self.flight_agent = FlightAgent()
         self.stays_agent = StaysAgent()
         self.activities_agent = ActivitiesAgent()
-        self.budget_agent = BudgetAgent()
-        self.weather_agent = WeatherAgent()
-        self.itinerary_agent = ItineraryAgent()
-        self.flight_agent = FlightAgent()
+        self.local_events_agent = LocalEventsAgent()  # 🌟 UNIQUE FEATURE
 
     def _analyze_intent(self, user_query):
         """
@@ -194,20 +167,16 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                         "needs_clarification": False,
                         "activate_destination": False,
                         "activate_stays": True,
-                        "activate_activities": False,
-                        "activate_budget": False,
-                        "activate_weather": False
+                        "activate_activities": False
                     }
                 elif user_asking_for == "flights":
+                    # We now have FlightAgent - activate it
                     return {
-                        "needs_clarification": True,
-                        "message": "I can help you plan your trip, but I don't currently book flights. I can help with:",
-                        "questions": [
-                            "🏨 Accommodations (hotels, hostels, resorts)",
-                            "🎯 Local activities and attractions",
-                            "💰 Budget planning",
-                            "🌍 Destination recommendations"
-                        ]
+                        "needs_clarification": False,
+                        "activate_destination": False,
+                        "activate_stays": False,
+                        "activate_activities": False,
+                        "activate_flights": True
                     }
                 elif user_asking_for == "activities":
                     # User specifically asked for activities - provide them
@@ -215,19 +184,14 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                         "needs_clarification": False,
                         "activate_destination": False,
                         "activate_stays": False,
-                        "activate_activities": True,
-                        "activate_budget": False,
-                        "activate_weather": False
+                        "activate_activities": True
                     }
                 elif user_asking_for == "budget_breakdown":
-                    # User is asking for budget breakdown - activate budget agent only
+                    # Budget agent removed - provide message
                     return {
-                        "needs_clarification": False,
-                        "activate_destination": False,
-                        "activate_stays": False,
-                        "activate_activities": False,
-                        "activate_budget": True,
-                        "activate_weather": False
+                        "needs_clarification": True,
+                        "message": "I focus on finding flights, hotels, and activities. The costs will be shown for each recommendation!",
+                        "questions": []
                     }
                 else:
                     # User is providing info (general) - check if we have everything
@@ -293,6 +257,24 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
         try:
             print(f"\nOrchestrator processing: {input_data[:100]}...")
             
+            # Check for negative/decline responses (user saying "No", "don't save", etc.)
+            user_query = input_data.split("Current query:")[-1].strip() if "Current query:" in input_data else input_data
+            negative_responses = ["no", "nope", "nah", "don't", "dont", "not interested", "skip", "cancel", "nevermind", "never mind", "no thanks", "no thank you"]
+            is_negative = any(neg in user_query.lower() for neg in negative_responses)
+            
+            # If user is declining (and we already showed complete itinerary), don't show recommendations again
+            if is_negative and memory:
+                # Check if we've already provided a complete response
+                recent_turns = memory.short_term[-3:] if len(memory.short_term) >= 3 else memory.short_term
+                has_shown_itinerary = any("itinerary" in str(turn.get("agent", "")).lower() for turn in recent_turns)
+                
+                if has_shown_itinerary:
+                    return {
+                        "needs_clarification": False,
+                        "message": "No problem! Feel free to start planning a new trip whenever you're ready. Just tell me where you'd like to go! ✈️",
+                        "skip_recommendations": True
+                    }
+            
             # Use memory entities if available (more reliable than LLM re-analysis)
             if memory:
                 has_destination = bool(memory.entities.get("destination")) and memory.entities.get("destination") != "null"
@@ -300,7 +282,14 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 has_duration = bool(memory.entities.get("duration")) and memory.entities.get("duration") != "null"
                 has_budget = bool(memory.entities.get("budget")) and memory.entities.get("budget") != "null"
                 has_interests = len(memory.entities.get("interests", [])) > 0
-                has_food_pref = bool(memory.entities.get("food_preference")) and memory.entities.get("food_preference") != "null"
+                
+                # STRICT validation for food preference - must be one of the valid options
+                food_pref_value = memory.entities.get("food_preference") or ""
+                if food_pref_value:
+                    food_pref_value = str(food_pref_value).lower()
+                valid_food_prefs = ["vegetarian", "non-vegetarian", "vegan", "any"]
+                has_food_pref = food_pref_value in valid_food_prefs
+                
                 has_travel_dates = bool(memory.entities.get("travel_dates")) and memory.entities.get("travel_dates") != "null"
                 has_time_pref = bool(memory.entities.get("travel_time_preference")) and memory.entities.get("travel_time_preference") != "null"
                 
@@ -331,8 +320,12 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 
                 print(f"Memory check - Destination:{has_destination}, DepartureCity:{has_departure_city}, Duration:{has_duration}, Budget:{has_budget}, Interests:{has_interests}, FoodPref:{has_food_pref}, TravelDates:{has_travel_dates}, TimePref:{has_time_pref}")
                 
-                # Check for cuisine preference
-                has_cuisine_pref = bool(memory.entities.get("cuisine_preference"))
+                # STRICT validation for cuisine preference - must be one of the valid options
+                cuisine_pref_value = memory.entities.get("cuisine_preference") or ""
+                if cuisine_pref_value:
+                    cuisine_pref_value = str(cuisine_pref_value).lower()
+                valid_cuisine_prefs = ["local", "indian", "chinese", "japanese", "thai", "italian", "any", "local cuisine"]
+                has_cuisine_pref = cuisine_pref_value in valid_cuisine_prefs
                 
                 # Check if we have complete info (all required fields)
                 # Duration is optional if we have travel_dates
@@ -355,9 +348,6 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                         questions.append("🎯 What are you interested in? (beach, culture, adventure, food, etc.)")
                     if not has_food_pref:
                         questions.append("🍽️ Food preference? (Vegetarian/Non-vegetarian/Vegan/Any)")
-                    
-                    # Check for cuisine preference
-                    has_cuisine_pref = bool(memory.entities.get("cuisine_preference"))
                     if not has_cuisine_pref:
                         questions.append("🌍 Preferred cuisine? (Local/Indian/Chinese/Japanese/Thai/Italian/Any)")
                     
@@ -376,8 +366,7 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 }
                 
                 # SEQUENTIAL EXECUTION with delays to avoid rate limits
-                # (Parallel was too fast - hit API rate limits!)
-                print("Running agents sequentially to avoid rate limits...")
+                print("Running 5 agents sequentially (including UNIQUE LocalEvents)...")
                 
                 # 1. Activate flight agent first
                 print("Activating FlightAgent...")
@@ -387,6 +376,10 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                 except Exception as e:
                     print(f"⚠️ FlightAgent error: {e}")
                     combined_result["flights"] = {"error": "Couldn't fetch flights at the moment"}
+                
+                # Small delay to respect rate limits
+                import time
+                time.sleep(1)
                 
                 # 2. Activate stays agent
                 print("Activating StaysAgent...")
@@ -398,22 +391,9 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                     combined_result["stays"] = {"error": "Couldn't fetch accommodations"}
                 
                 # Small delay to respect rate limits
-                import time
                 time.sleep(1)
                 
-                # 3. Activate itinerary agent
-                print("Activating ItineraryAgent...")
-                try:
-                    combined_result["itinerary"] = self.itinerary_agent.handle_request(input_data)
-                    print("✅ ItineraryAgent done")
-                except Exception as e:
-                    print(f"⚠️ ItineraryAgent error: {e}")
-                    combined_result["itinerary"] = {"error": "Couldn't generate itinerary"}
-                
-                # Small delay to respect rate limits
-                time.sleep(1)
-                
-                # 4. Activate activities agent
+                # 3. Activate activities agent
                 print("Activating ActivitiesAgent...")
                 try:
                     combined_result["activities"] = self.activities_agent.handle_request(input_data)
@@ -422,7 +402,31 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                     print(f"⚠️ ActivitiesAgent error: {e}")
                     combined_result["activities"] = {"error": "Couldn't fetch activities"}
                 
-                print("🎉 All agents completed!")
+                # Small delay to respect rate limits
+                time.sleep(1)
+                
+                # 4. 🌟 UNIQUE FEATURE: Activate local events agent
+                print("Activating LocalEventsAgent (UNIQUE FEATURE)...")
+                try:
+                    combined_result["local_events"] = self.local_events_agent.handle_request(input_data)
+                    print("✅ LocalEventsAgent done (UNIQUE FEATURE)")
+                except Exception as e:
+                    print(f"⚠️ LocalEventsAgent error: {e}")
+                    combined_result["local_events"] = {"error": "Couldn't fetch local events"}
+                
+                # Small delay to respect rate limits
+                time.sleep(1)
+                
+                # 5. Activate destination agent (for additional recommendations)
+                print("Activating DestinationAgent...")
+                try:
+                    combined_result["destinations"] = self.destination_agent.handle_request(input_data)
+                    print("✅ DestinationAgent done")
+                except Exception as e:
+                    print(f"⚠️ DestinationAgent error: {e}")
+                    combined_result["destinations"] = {"error": "Couldn't fetch destination info"}
+                
+                print("🎉 All 5 agents completed (including UNIQUE LocalEvents feature)!")
                 return combined_result
             
             # Fallback: No memory provided, use LLM analysis
@@ -445,7 +449,7 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                     "query_analysis": intent.get("summary", "")
                 }
                 
-                # Delegate to appropriate agents
+                # Delegate to 4 essential agents only
                 if intent.get("activate_destination", True):
                     print("Activating DestinationAgent...")
                     combined_result["destinations"] = self.destination_agent.handle_request(input_data)
@@ -454,17 +458,13 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
                     print("Activating StaysAgent...")
                     combined_result["stays"] = self.stays_agent.handle_request(input_data)
                 
-                if intent.get("activate_activities", False):
+                if intent.get("activate_activities", True):
                     print("Activating ActivitiesAgent...")
                     combined_result["activities"] = self.activities_agent.handle_request(input_data)
                 
-                if intent.get("activate_budget", False):
-                    print("Activating BudgetAgent...")
-                    combined_result["budget"] = self.budget_agent.handle_request(input_data)
-                
-                if intent.get("activate_weather", False):
-                    print("Activating WeatherAgent...")
-                    combined_result["weather"] = self.weather_agent.handle_request(input_data)
+                # Always try to activate flight agent if we have complete info
+                print("Activating FlightAgent...")
+                combined_result["flights"] = self.flight_agent.handle_request(input_data)
                 
                 return combined_result
             
@@ -476,5 +476,8 @@ RESPOND WITH ONLY THE JSON OBJECT, NO OTHER TEXT."""
             return {
                 "needs_clarification": False,
                 "destinations": self.destination_agent.handle_request(input_data),
-                "stays": self.stays_agent.handle_request(input_data)
+                "stays": self.stays_agent.handle_request(input_data),
+                "activities": self.activities_agent.handle_request(input_data),
+                "flights": self.flight_agent.handle_request(input_data),
+                "local_events": self.local_events_agent.handle_request(input_data)
             }

@@ -57,7 +57,7 @@ export default function FlightCard({ flight }) {
             </Box>
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="h5" sx={{ color: '#3b82f6', fontWeight: 700 }}>
-                ${flight.price}
+                {flight.price?.toString().startsWith('$') ? flight.price : `$${flight.price}`}
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748b' }}>
                 per person

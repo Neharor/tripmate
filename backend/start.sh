@@ -1,3 +1,3 @@
 #!/bin/bash
-cd /Users/mokalra/Documents/tripmate/backend
+cd /Users/nehaarora/Documents/tripmate/backend
 python3 main.py

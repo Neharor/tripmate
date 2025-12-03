@@ -8,6 +8,8 @@ import {
 } from '@mui/material';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 
+const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
+
 const DestinationAutocomplete = ({ onSelect, placeholder = "Search destinations..." }) => {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState([]);
@@ -18,10 +20,11 @@ const DestinationAutocomplete = ({ onSelect, placeholder = "Search destinations.
   useEffect(() => {
     const fetchPopular = async () => {
       try {
-        const response = await fetch('http://localhost:5002/api/locations/popular');
+        const response = await fetch(`${BACKEND_URL}/api/locations/popular`);
         const data = await response.json();
         if (data.locations) {
           setOptions(data.locations);
+          console.log('✅ Popular destinations loaded:', data.locations.length);
         }
       } catch (error) {
         console.error('Error fetching popular destinations:', error);
@@ -34,6 +37,21 @@ const DestinationAutocomplete = ({ onSelect, placeholder = "Search destinations.
   useEffect(() => {
     // Don't search for queries shorter than 2 characters
     if (inputValue.length < 2) {
+      // If no input, show popular destinations
+      if (inputValue.length === 0 && options.length === 0) {
+        const fetchPopular = async () => {
+          try {
+            const response = await fetch(`${BACKEND_URL}/api/locations/popular`);
+            const data = await response.json();
+            if (data.locations) {
+              setOptions(data.locations);
+            }
+          } catch (error) {
+            console.error('Error fetching popular destinations:', error);
+          }
+        };
+        fetchPopular();
+      }
       return;
     }
 
@@ -41,23 +59,46 @@ const DestinationAutocomplete = ({ onSelect, placeholder = "Search destinations.
       setLoading(true);
       try {
         const response = await fetch(
-          `http://localhost:5002/api/locations/search?q=${encodeURIComponent(inputValue)}&limit=10`
+          `${BACKEND_URL}/api/locations/search?q=${encodeURIComponent(inputValue)}&limit=10`
         );
         const data = await response.json();
-        if (data.locations) {
+        if (data.locations && data.locations.length > 0) {
           setOptions(data.locations);
         } else {
-          setOptions([]);
+          // Fallback to popular destinations if search returns nothing
+          try {
+            const popularResponse = await fetch(`${BACKEND_URL}/api/locations/popular`);
+            const popularData = await popularResponse.json();
+            if (popularData.locations) {
+              setOptions(popularData.locations);
+            } else {
+              setOptions([]);
+            }
+          } catch (error) {
+            console.error('Error fetching fallback destinations:', error);
+            setOptions([]);
+          }
         }
       } catch (error) {
         console.error('Error searching destinations:', error);
-        setOptions([]);
+        // Fallback to popular destinations on error
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/locations/popular`);
+          const data = await response.json();
+          if (data.locations) {
+            setOptions(data.locations);
+          }
+        } catch (e) {
+          console.error('Error fetching fallback destinations:', e);
+          setOptions([]);
+        }
       } finally {
         setLoading(false);
       }
     }, 300); // 300ms debounce delay
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue]);
 
   const handleSelect = (event, value) => {
@@ -136,7 +177,9 @@ const DestinationAutocomplete = ({ onSelect, placeholder = "Search destinations.
         },
       }}
       noOptionsText={
-        inputValue.length < 2
+        inputValue.length === 0
+          ? "Popular destinations will appear here"
+          : inputValue.length < 2
           ? "Type at least 2 characters to search"
           : "No destinations found"
       }

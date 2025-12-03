@@ -75,31 +75,47 @@ Return ONLY valid JSON with these fields:
     "interests": ["beach", "culture", etc.] or [],
     "food_preference": "'vegetarian', 'non-vegetarian', 'vegan', 'any' or null",
     "cuisine_preference": "'Indian', 'Chinese', 'Japanese', 'Thai', 'Italian', 'Local cuisine', 'Any' or null",
-    "travel_dates": "e.g., '2025-12-25 to 2025-12-30', 'Jan 15 to Jan 20', 'starting March 1' or null",
+    "travel_dates": "MUST include year! e.g., 'Dec 15, 2025 to Dec 20, 2025', '2025-12-25 to 2025-12-30', or null",
     "travel_time_preference": "'morning', 'afternoon', 'evening', 'anytime' or null",
     "companions": "'solo', 'couple', 'family', 'friends' or null"
 }}
 
 CRITICAL Rules for CONTEXT AWARENESS:
-1. **NEVER OVERWRITE ALREADY KNOWN FIELDS** - If a field is marked as "ALREADY KNOWN" above, YOU MUST return null for it. This is NON-NEGOTIABLE!
-   Example: If destination is ALREADY KNOWN as "Delhi", and user says "Tokyo", DO NOT change destination to Tokyo!
-2. **Look at what the assistant JUST asked:**
+1. **DETECTING EXPLICIT CHANGES (user wants to UPDATE existing info):**
+   - Phrases like "actually", "instead", "change to", "I meant", "correction", "no wait" = USER IS UPDATING
+   - Example: "actually 7 days" → UPDATE duration (even if duration already set)
+   - Example: "change destination to Tokyo" → UPDATE destination to Tokyo
+   - Example: "I meant $50 per day" → UPDATE budget
+   - When you detect explicit change phrases, return the NEW value in JSON (this will REPLACE old value)
+
+2. **DESTINATION UPDATE LOGIC:**
+   - If user explicitly says "change destination to X" or "I want to go to X instead" → UPDATE destination to X
+   - If destination is already known and user mentions a NEW city WITHOUT context → That's departure_city
+   - If user says "from X to Y" → X is departure_city, Y is destination
+   - Look at conversation flow to determine if user is CHANGING destination or ADDING departure city
+
+3. **Look at what the assistant JUST asked:**
    - If assistant asked "Where do you want to go?" → Next city = destination
    - If assistant asked "Where are you flying from?" → Next city = departure_city (NOT destination)
-   - If assistant asked "When do you want to travel?" → Next answer = travel_dates
+   - If assistant asked "When do you want to travel?" → Next answer = travel_dates (MUST include year: "Dec 15, 2025 to Dec 20, 2025")
    - If assistant asked "What time do you prefer to fly?" → Next answer = travel_time_preference
    - If assistant asked "Food preference?" → Next answer = food_preference (Vegetarian/Non-vegetarian/Vegan/Any)
    - If assistant asked "Preferred cuisine?" → Next answer = cuisine_preference (Indian/Chinese/Japanese/Thai/etc.)
-3. **Smart city detection - CRITICAL ORDER:**
-   - If destination is ALREADY SET → Return null for destination (DON'T CHANGE IT!)
-   - If destination is NOT set yet and user mentions a city → That's the destination (FIRST PRIORITY)
-   - If destination is ALREADY SET and user mentions a city → That's the departure_city
-   - DEFAULT: When in doubt, if it's early in conversation and only ONE city mentioned → It's the destination
-4. **Only extract NEW information** from the latest user message
-5. Use null for missing information
-6. If user updates info (e.g., changes budget), return the NEW value
 
-ABSOLUTE RULE: NEVER overwrite destination if it's already known! If user provides another city after destination is set, that city is departure_city!
+4. **Smart city detection:**
+   - First city mentioned in conversation → destination
+   - Second city mentioned → departure_city (unless user is clearly changing destination)
+   - If user says "actually, I want to go to X" or "change to X" → UPDATE destination
+
+5. **Date format MUST include year:**
+   - Always extract dates with full year: "Jan 15, 2025 to Jan 20, 2025" or "2025-01-15 to 2025-01-20"
+   - If user says "Dec 15 to Dec 20" → Add current year (2025): "Dec 15, 2025 to Dec 20, 2025"
+
+6. **Only extract NEW information** from the latest user message
+7. Use null for missing information
+8. **CRITICAL: Explicit changes override existing values**
+   - If user uses change phrases ("actually", "instead", "change to"), ALWAYS return the NEW value
+   - This signals to the system to REPLACE the old value, not ignore it
 
 RESPOND WITH ONLY THE JSON OBJECT."""
 
