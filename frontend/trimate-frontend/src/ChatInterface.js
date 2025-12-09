@@ -177,10 +177,14 @@ export default function ChatInterface({ onBackToHome }) {
       // Check if this is a complete trip (has flights AND itinerary) - hotels optional
       const hasCompleteTrip = (flights || flightText) && itineraryText;
       
+      // Only show Trip Summary in the LAST message with visual data to avoid repetition
+      const visualMessages = messages.filter(m => m.messageType === 'visual' && m.visualData);
+      const isLastVisualMessage = visualMessages.length > 0 && visualMessages[visualMessages.length - 1] === msg;
+      
       return (
         <Box>
-          {/* 0. Trip Summary - Optional */}
-          {(destination || departureCity || travelDates) && (
+          {/* 0. Trip Summary - Optional - Only show in last visual message */}
+          {isLastVisualMessage && (destination || departureCity || travelDates) && (
             <Box sx={{ mb: 3 }}>
               <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>🧭 Trip Summary</Typography>
@@ -242,27 +246,28 @@ export default function ChatInterface({ onBackToHome }) {
                   const itineraryMatch = cleanText.match(/##\s*📅\s*Daily Itinerary\s*([\s\S]*?)(?=\n##|$)/i);
                   const itinerarySection = itineraryMatch ? itineraryMatch[1] : cleanText;
                   
-                  // Split into Day sections
+                  // Split into Day sections - use split instead of regex exec loop
                   const days = [];
-                  const dayPattern = /###\s*\*\*Day\s*(\d+)\*\*\s*-\s*([^\n]+)\s*((?:[\s\S]*?)(?=###\s*\*\*Day|\n##|$))/gi;
-                  let match;
+                  const daySections = itinerarySection.split(/(?=###\s*\*\*Day\s*\d+\*\*)/);
                   
-                  while ((match = dayPattern.exec(itinerarySection)) !== null) {
-                    const dayNum = match[1];
-                    const date = match[2].trim();
-                    const content = match[3].trim();
-                    
-                    // Extract bullet points
-                    const items = content
-                      .split('\n')
-                      .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
-                      .map(line => line.replace(/^[-•]\s*/, '').trim())
-                      .filter(item => item.length > 0);
-                    
-                    if (items.length > 0) {
-                      days.push({ title: `Day ${dayNum} - ${date}`, items });
+                  daySections.forEach((section, idx) => {
+                    const dayMatch = section.match(/###\s*\*\*Day\s*(\d+)\*\*\s*-\s*([^\n]+)/);
+                    if (dayMatch) {
+                      const dayNum = dayMatch[1];
+                      const date = dayMatch[2].trim();
+                      
+                      // Extract bullet points
+                      const items = section
+                        .split('\n')
+                        .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
+                        .map(line => line.replace(/^[-•]\s*/, '').trim())
+                        .filter(item => item.length > 0);
+                      
+                      if (items.length > 0) {
+                        days.push({ title: `Day ${dayNum} - ${date}`, items });
+                      }
                     }
-                  }
+                  });
                   
                   // Fallback: If no structured days found, try simple "Day X:" format
                   if (days.length === 0) {

@@ -157,18 +157,20 @@ Thought: {agent_scratchpad}""")
             
             # CHECK IF TRIP ALREADY GENERATED (priority check - skip clarifications if trip exists)
             if memory and hasattr(memory, 'has_trip_data') and memory.has_trip_data():
-                print("♻️ Trip already generated - returning cached data (skipping clarifications)")
+                print("♻️ Trip already generated - returning cached data (STOPPING to prevent more questions)")
                 trip_data = memory.generated_trip_data
                 
-                # Return a conversational response with cached trip data
+                # Return a conversational response with cached trip data AND add memory entities
+                # This ensures frontend knows we're DONE collecting info
                 return {
                     "needs_clarification": False,
-                    "message": "Your trip itinerary is ready! Let me know if you'd like any changes or have questions.",
+                    "message": trip_data.get("itinerary_text", "Your trip itinerary is ready!"),
                     "agent_type": "visual_cards_with_data",
                     "flights": trip_data.get("flights", []),
                     "stays": trip_data.get("hotels", []),
                     "itinerary_text": trip_data.get("itinerary_text"),
-                    "cached": True
+                    "cached": True,
+                    "memory_entities": memory.entities if memory else {}
                 }
             
             # Check if we have enough information to plan a trip
@@ -332,16 +334,17 @@ Thought: {agent_scratchpad}""")
             return int(match.group(1))
         
         # Try to extract from date range "Dec 1, 2025 to Oct 1, 2026"
-        if ' to ' in duration_str:
+        if ' to ' in duration_str or ' To ' in duration_str:
             try:
-                parts = duration_str.split(' to ')
+                parts = duration_str.split(' to ') if ' to ' in duration_str else duration_str.split(' To ')
                 if len(parts) == 2:
                     # Try different date formats
                     for fmt in ['%b %d, %Y', '%Y-%m-%d', '%m/%d/%Y']:
                         try:
                             start = datetime.strptime(parts[0].strip(), fmt)
                             end = datetime.strptime(parts[1].strip(), fmt)
-                            days = (end - start).days
+                            # Add 1 to include both start and end days (Dec 8-10 = 3 days, not 2)
+                            days = (end - start).days + 1
                             return days
                         except:
                             continue
@@ -895,8 +898,27 @@ Thought: {agent_scratchpad}""")
         if isinstance(cuisine_prefs, str):
             cuisine_prefs = [cuisine_prefs] if cuisine_prefs else []
         
-        # Generate dates
-        start_date = datetime.now() + timedelta(days=1)
+        # Parse actual travel dates from memory (e.g., "Dec 8, 2025 to Dec 10, 2025")
+        start_date = datetime.now() + timedelta(days=1)  # Default fallback
+        if memory and entities.get("travel_dates"):
+            try:
+                travel_dates_str = entities.get("travel_dates")
+                print(f"🗓️ Parsing travel dates: {travel_dates_str}")
+                
+                # Handle formats: "Dec 8, 2025 to Dec 10, 2025" or "2025-12-08 to 2025-12-10"
+                if " to " in travel_dates_str:
+                    start_date_str = travel_dates_str.split(" to ")[0].strip()
+                    
+                    # Try parsing different date formats
+                    for fmt in ["%b %d, %Y", "%B %d, %Y", "%Y-%m-%d", "%m/%d/%Y"]:
+                        try:
+                            start_date = datetime.strptime(start_date_str, fmt)
+                            print(f"✅ Parsed start date: {start_date.strftime('%B %d, %Y')}")
+                            break
+                        except ValueError:
+                            continue
+            except Exception as e:
+                print(f"⚠️ Could not parse travel dates: {e}, using default (tomorrow)")
         
         parts = []
         parts.append(f"# 🎯 **AI-Powered {days}-Day {destination} Experience**\n")
