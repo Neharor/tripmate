@@ -3,10 +3,8 @@ Multi-layered memory system for TripMate agentic AI
 Implements: Short-term, Long-term, and Semantic memory
 """
 
-import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from collections import defaultdict
 
 
 class ConversationMemory:
@@ -40,7 +38,7 @@ class ConversationMemory:
             "companions": None,  # solo, couple, family, friends
             "accommodation_preferences": [],
             "activity_preferences": [],
-            "dietary_restrictions": [],
+            "dietary_preference": [],
             "special_requirements": []
         }
         
@@ -57,6 +55,15 @@ class ConversationMemory:
         
         # CONTEXT: Additional runtime context (UI selections, etc.)
         self.context = {}
+        
+        # GENERATED TRIP DATA: Store generated flights, hotels, activities to prevent regeneration
+        self.generated_trip_data = {
+            "flights": None,
+            "hotels": None,
+            "activities": None,
+            "itinerary_text": None,
+            "generated_at": None
+        }
         
         # Metadata
         self.created_at = datetime.utcnow()
@@ -97,10 +104,18 @@ class ConversationMemory:
         if entity_type not in self.entities:
             return
         
+        # Core trip parameters - if they change, clear cached trip data
+        core_params = ["destination", "departure_city", "duration", "travel_dates", "budget"]
+        
         if append and isinstance(self.entities[entity_type], list):
             if value not in self.entities[entity_type]:
                 self.entities[entity_type].append(value)
         else:
+            # Check if core parameter changed
+            if entity_type in core_params and self.entities[entity_type] != value:
+                print(f"🔄 Core parameter '{entity_type}' changed: {self.entities[entity_type]} → {value}")
+                self.clear_trip_data()
+            
             self.entities[entity_type] = value
         
         self.last_updated = datetime.utcnow()
@@ -149,6 +164,33 @@ class ConversationMemory:
             self.entities["budget"],
             len(self.entities["interests"]) > 0
         ])
+    
+    def store_trip_data(self, flights, hotels, activities=None, itinerary_text=None):
+        """Store generated trip data to prevent regeneration on every message"""
+        self.generated_trip_data = {
+            "flights": flights,
+            "hotels": hotels,
+            "activities": activities,
+            "itinerary_text": itinerary_text,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        self.last_updated = datetime.utcnow()
+        print(f"💾 Stored trip data: {len(flights or [])} flights, {len(hotels or [])} hotels")
+    
+    def has_trip_data(self) -> bool:
+        """Check if trip data has already been generated"""
+        return self.generated_trip_data.get("flights") is not None
+    
+    def clear_trip_data(self):
+        """Clear generated trip data (when core params like destination/dates change)"""
+        self.generated_trip_data = {
+            "flights": None,
+            "hotels": None,
+            "activities": None,
+            "itinerary_text": None,
+            "generated_at": None
+        }
+        print("🗑️ Cleared trip data - will regenerate on next request")
     
     def get_missing_info(self) -> List[str]:
         """Return list of missing required information"""

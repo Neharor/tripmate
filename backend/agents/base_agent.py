@@ -22,9 +22,10 @@ class BaseAgent(ABC):
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",  # Ultra fast, free model
             groq_api_key=api_key,
-            temperature=0.3,  # Lower for more focused output
-            max_tokens=1000,  # Increased for full itineraries
-            timeout=10  # Increased timeout for longer responses
+            temperature=0,  # Zero for maximum speed and determinism
+            max_tokens=300,  # Minimal tokens for speed
+            timeout=2,  # Ultra short timeout
+            max_retries=1  # Single retry only
         )
     
     def _call_llm(self, user_message):

@@ -13,16 +13,33 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 export default function HotelCardCompact({ hotel, travelDates }) {
   const [expanded, setExpanded] = useState(false);
 
-  const parseHotel = (hotelStr) => {
-    const match = hotelStr.match(/🏨\s*(.+?)\s*-\s*(.+?),?\s*\$(\d+)\/night/);
+  // Handle both string format and object format
+  const parseHotel = (hotelData) => {
+    // If already an object, return it
+    if (typeof hotelData === 'object' && hotelData.name) {
+      return {
+        name: hotelData.name || 'Hotel',
+        description: hotelData.area || hotelData.amenities || '',
+        price: hotelData.price || 0,
+        rating: hotelData.rating || 4.5,
+        amenities: hotelData.amenities || 'WiFi, Pool, Gym',
+        booking_url: hotelData.booking_url || `https://www.booking.com/search.html?ss=${encodeURIComponent(hotelData.name || 'hotel')}`
+      };
+    }
+    
+    // Otherwise parse string format
+    const match = hotelData.match(/🏨\s*(.+?)\s*-\s*(.+?),?\s*\$(\d+)\/night/);
     if (match) {
       return {
         name: match[1].trim(),
         description: match[2].trim(),
-        price: match[3]
+        price: match[3],
+        rating: 4.5,
+        amenities: 'WiFi, Pool, Gym',
+        booking_url: `https://www.booking.com/search.html?ss=${encodeURIComponent(match[1].trim())}`
       };
     }
-    return { name: 'Hotel', description: '', price: '0' };
+    return { name: 'Hotel', description: '', price: '0', rating: 4.5, amenities: '', booking_url: 'https://www.booking.com/' };
   };
 
   // Parse travel dates to get checkin/checkout

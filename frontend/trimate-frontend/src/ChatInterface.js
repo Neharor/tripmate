@@ -91,6 +91,12 @@ export default function ChatInterface({ onBackToHome }) {
   const [showFoodPreference, setShowFoodPreference] = React.useState(false);
   const [showCuisinePreference, setShowCuisinePreference] = React.useState(false);
   
+  // State for travel companion selection
+  const [showTravelCompanion, setShowTravelCompanion] = React.useState(false);
+  
+  // State for dietary preferences selection
+  const [showDietaryPreference, setShowDietaryPreference] = React.useState(false);
+  
   // Track UI selections for conflict detection
   const [uiSelections, setUiSelections] = React.useState({});
   
@@ -168,16 +174,36 @@ export default function ChatInterface({ onBackToHome }) {
     if (msg.messageType === 'visual' && msg.visualData) {
       const { stays, itineraryText, flights, flightText, activities, departureCity, destination, travelDates } = msg.visualData;
       
-      // Check if this is a complete trip (has flights AND itinerary AND stays)
-      const hasCompleteTrip = (flights || flightText) && itineraryText && stays && stays.length > 0;
+      // Check if this is a complete trip (has flights AND itinerary) - hotels optional
+      const hasCompleteTrip = (flights || flightText) && itineraryText;
       
       return (
         <Box>
+          {/* 0. Trip Summary - Optional */}
+          {(destination || departureCity || travelDates) && (
+            <Box sx={{ mb: 3 }}>
+              <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>🧭 Trip Summary</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  {departureCity && (
+                    <Chip label={`From: ${departureCity}`} sx={{ bgcolor: '#fff', border: '1px solid #e2e8f0' }} />
+                  )}
+                  {destination && (
+                    <Chip label={`To: ${destination}`} sx={{ bgcolor: '#fff', border: '1px solid #e2e8f0' }} />
+                  )}
+                  {travelDates && (
+                    <Chip label={`Dates: ${travelDates}`} sx={{ bgcolor: '#fff', border: '1px solid #e2e8f0' }} />
+                  )}
+                </Box>
+              </Paper>
+            </Box>
+          )}
+
           {/* 1. Flight Cards - First */}
           {(flights || flightText) && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                ✈️ Flight Options
+                ✈️ Flight Options {travelDates ? `(${travelDates})` : ''}
               </Typography>
               <FlightCard 
                 flights={flights || flightText}
@@ -206,9 +232,70 @@ export default function ChatInterface({ onBackToHome }) {
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
                 📅 Your Itinerary
               </Typography>
-              <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                {itineraryText}
-              </Typography>
+              {/* Parse Day-by-Day itinerary into clean cards */}
+              <Box sx={{ display: 'grid', gap: 2 }}>
+                {(() => {
+                  // Strip HTML tags and extract Day sections
+                  const cleanText = itineraryText.replace(/<[^>]+>/g, '').replace(/\n\s*\n/g, '\n');
+                  
+                  // Find the "Daily Itinerary" section
+                  const itineraryMatch = cleanText.match(/##\s*📅\s*Daily Itinerary\s*([\s\S]*?)(?=\n##|$)/i);
+                  const itinerarySection = itineraryMatch ? itineraryMatch[1] : cleanText;
+                  
+                  // Split into Day sections
+                  const days = [];
+                  const dayPattern = /###\s*\*\*Day\s*(\d+)\*\*\s*-\s*([^\n]+)\s*((?:[\s\S]*?)(?=###\s*\*\*Day|\n##|$))/gi;
+                  let match;
+                  
+                  while ((match = dayPattern.exec(itinerarySection)) !== null) {
+                    const dayNum = match[1];
+                    const date = match[2].trim();
+                    const content = match[3].trim();
+                    
+                    // Extract bullet points
+                    const items = content
+                      .split('\n')
+                      .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
+                      .map(line => line.replace(/^[-•]\s*/, '').trim())
+                      .filter(item => item.length > 0);
+                    
+                    if (items.length > 0) {
+                      days.push({ title: `Day ${dayNum} - ${date}`, items });
+                    }
+                  }
+                  
+                  // Fallback: If no structured days found, try simple "Day X:" format
+                  if (days.length === 0) {
+                    cleanText.split('\n').reduce((daysList, line) => {
+                      const dayHeader = line.match(/^\s*Day\s*(\d+)[\s:]*(.*)$/i);
+                      if (dayHeader) {
+                        daysList.push({ title: `Day ${dayHeader[1]}${dayHeader[2] ? `: ${dayHeader[2]}` : ''}`, items: [] });
+                      } else if (line.trim() && (line.trim().startsWith('-') || line.trim().startsWith('•'))) {
+                        if (daysList.length === 0) daysList.push({ title: 'Day 1', items: [] });
+                        const item = line.replace(/^[-•]\s*/, '').trim();
+                        if (item) daysList[daysList.length - 1].items.push(item);
+                      }
+                      return daysList;
+                    }, days);
+                  }
+                  
+                  return days.map((day, idx) => (
+                    <Paper key={idx} sx={{ p: 3, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#fafafa' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1e293b', fontSize: '1.1rem' }}>
+                        {day.title}
+                      </Typography>
+                      <Box component="ul" sx={{ pl: 3, m: 0, listStyle: 'none' }}>
+                        {day.items.map((item, i) => (
+                          <li key={i} style={{ marginBottom: '12px', paddingLeft: '8px', borderLeft: '3px solid #60a5fa', display: 'flex', alignItems: 'flex-start' }}>
+                            <span style={{ marginRight: '8px', color: '#60a5fa' }}>•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </Box>
+                    </Paper>
+                  ));
+                })()}
+              </Box>
             </Box>
           )}
           
@@ -245,15 +332,59 @@ export default function ChatInterface({ onBackToHome }) {
       );
     }
     
-    // Handle plain text messages
+    // Handle plain text messages with HTML support for booking carousels
     return (
-      <Typography sx={{
+      <Box sx={{
         fontSize: '15px',
         lineHeight: '1.6',
-        fontWeight: 400
-      }}>
-        {msg.message}
-      </Typography>
+        fontWeight: 400,
+        '& .booking-carousel': {
+          margin: '20px 0',
+          padding: '15px',
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+          borderRadius: '15px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+        },
+        '& .booking-buttons': {
+          display: 'flex',
+          gap: '15px',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+        },
+        '& .book-btn': {
+          flex: 1,
+          minWidth: '200px',
+          padding: '15px 20px',
+          borderRadius: '12px',
+          textDecoration: 'none',
+          color: 'inherit',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          cursor: 'pointer',
+          border: '2px solid transparent',
+          background: 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          '&:hover': {
+            transform: 'translateY(-5px) scale(1.02)',
+            boxShadow: '0 15px 40px rgba(0,0,0,0.2)',
+          }
+        },
+        '& .expedia-btn:hover': {
+          background: 'linear-gradient(135deg, #ffd700, #ffb347)',
+        },
+        '& .kayak-btn:hover': {
+          background: 'linear-gradient(135deg, #ff6b35, #f7931e)',
+        },
+        '& .skyscanner-btn:hover': {
+          background: 'linear-gradient(135deg, #00b4d8, #0077b6)',
+        }
+      }}
+      dangerouslySetInnerHTML={{ 
+        __html: msg.message.replace(/\n/g, '<br/>') 
+      }}
+      />
     );
   };
 
@@ -300,6 +431,7 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(false);
             setShowFoodPreference(false);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
             setQuickOptions([]);
           } else if (fields.duration && fields.travel_dates) {
             setShowDatePicker(true);
@@ -307,6 +439,8 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(false);
             setShowFoodPreference(false);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
             setQuickOptions(durationOptions);
           } else if (fields.budget) {
             // Show budget chips only
@@ -316,6 +450,8 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(false);
             setShowFoodPreference(false);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
           } else if (fields.interests) {
             // Show interests multi-select
             console.log('✅ Showing interests multi-select from show_form_fields');
@@ -325,6 +461,8 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(true);
             setShowFoodPreference(false);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
           } else if (fields.food_preference) {
             // Show food preference dropdown only
             setQuickOptions([]);
@@ -333,6 +471,8 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(false);
             setShowFoodPreference(true);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
           } else if (fields.cuisine_preference) {
             // Show cuisine preference dropdown only
             setQuickOptions([]);
@@ -341,12 +481,39 @@ export default function ChatInterface({ onBackToHome }) {
             setShowInterestMultiSelect(false);
             setShowFoodPreference(false);
             setShowCuisinePreference(true);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
+          } else if (fields.travel_companion) {
+            // Show travel companion radio buttons
+            const options = fields.travel_companion.options || [];
+            const companionOptions = options.map(opt => opt.label || opt.value);
+            setQuickOptions(companionOptions);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+            setShowTravelCompanion(true);
+            setShowDietaryPreference(false);
+          } else if (fields.dietary_preference) {
+            // Show dietary preference multi-select
+            const options = fields.dietary_preference.options || [];
+            setQuickOptions(options);
+            setShowDatePicker(false);
+            setShowDestinationAutocomplete(false);
+            setShowInterestMultiSelect(false);
+            setShowFoodPreference(false);
+            setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(true);
           } else if (fields.departure_city) {
             setShowDestinationAutocomplete(true);
             setShowDatePicker(false);
             setShowInterestMultiSelect(false);
             setShowFoodPreference(false);
             setShowCuisinePreference(false);
+            setShowTravelCompanion(false);
+            setShowDietaryPreference(false);
             setQuickOptions([]);
           }
           
@@ -445,7 +612,124 @@ export default function ChatInterface({ onBackToHome }) {
       setQuickOptions([]);
       setShowDatePicker(false);
       setShowInterestMultiSelect(false);
+      setShowDestinationAutocomplete(false);
+      setShowFoodPreference(false);
+      setShowCuisinePreference(false);
+      setShowTravelCompanion(false);
+      setShowDietaryPreference(false);
+
+      // Handle fallback/error responses
+      if (data.agent_type === 'fallback' || data.debug_error) {
+        console.error('Backend error:', data.debug_error);
+        return { 
+          type: 'text', 
+          content: data.message || "I encountered an issue planning your trip. Let me try again - could you please confirm your travel details?" 
+        };
+      }
+
+      // Client-side safety net: if backend didn't ask, infer UI from last user message
+      // This preserves the old "we used to select" experience.
+      const lastUserMsg = messages.filter(m => m.sender === 'user').slice(-1)[0]?.message?.toLowerCase() || '';
+      if (!data.needs_clarification && !data.show_form_fields) {
+        if (/where|destination|go to|travel to/.test(lastUserMsg)) {
+          setShowDestinationAutocomplete(true);
+        } else if (/date|when|start|end|days|duration/.test(lastUserMsg)) {
+          setShowDatePicker(true);
+        } else if (/budget|cost|price/.test(lastUserMsg)) {
+          setQuickOptions(budgetOptions);
+        } else if (/interest|interested|hobbies|activities/.test(lastUserMsg)) {
+          setShowInterestMultiSelect(true);
+        } else if (/vegan|vegetarian|diet|food preference/.test(lastUserMsg)) {
+          setShowFoodPreference(true);
+        } else if (/cuisine|food type/.test(lastUserMsg)) {
+          setShowCuisinePreference(true);
+        } else if (/solo|partner|family|friends|companion/.test(lastUserMsg)) {
+          setShowTravelCompanion(true);
+        } else if (/dietary/.test(lastUserMsg)) {
+          setShowDietaryPreference(true);
+        }
+      }
       
+      // NEW: Handle agent_type structure (visual_cards_with_data)
+      if (data.agent_type === 'visual_cards_with_data') {
+        const flights = data.flights || [];  // Direct array
+        const stays = data.stays || [];  // Direct array
+        const itineraryText = data.itinerary_text || data.message || '';
+        const destinations = [];
+        const activities = [];
+        
+        // Extract departure city and destination from memory entities
+        if (data.memory_entities) {
+          if (data.memory_entities.departure_city) {
+            setDepartureCity(data.memory_entities.departure_city);
+          }
+          if (data.memory_entities.destination) {
+            setDestination(data.memory_entities.destination);
+            setCurrentDestination(data.memory_entities.destination);
+          }
+          if (data.memory_entities.travel_dates) {
+            setTravelDates(data.memory_entities.travel_dates);
+          }
+        }
+        
+        // Store hotels for map
+        if (stays.length > 0) {
+          setCurrentHotels(stays);
+        }
+        
+        // Prepare trip data for saving
+        if (flights.length > 0 && itineraryText && stays.length > 0 && data.memory_entities) {
+          const tripData = {
+            destination: data.memory_entities.destination || '',
+            departure_city: data.memory_entities.departure_city || '',
+            duration_days: parseInt(data.memory_entities.duration || '5'),
+            start_date: data.memory_entities.travel_dates?.split(' to ')[0] || null,
+            end_date: data.memory_entities.travel_dates?.split(' to ')[1] || null,
+            budget: {
+              per_day: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100'),
+              total: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100') * parseInt(data.memory_entities.duration || '5')
+            },
+            preferences: {
+              interests: data.memory_entities.interests || [],
+              food_preference: data.memory_entities.food_preference || 'Any',
+              flight_time_preference: data.memory_entities.travel_time_preference || 'Anytime'
+            },
+            flights: {
+              outbound: JSON.stringify(flights[0])
+            },
+            stays: stays.map(hotel => ({
+              name: hotel.name || '',
+              price_per_night: hotel.price || 65,
+              total_nights: parseInt(data.memory_entities.duration || '5')
+            })),
+            itinerary: [{
+              day: 1,
+              activities: [{ name: itineraryText }]
+            }],
+            bookable_activities: []
+          };
+          
+          setCurrentTripData(tripData);
+        }
+        
+        // Return structured data for visual rendering
+        return {
+          type: 'visual',
+          data: {
+            destinations: [],
+            stays,
+            activities: [],
+            itineraryText,
+            flights,  // Structured array
+            flightText: '',
+            departureCity: data.memory_entities?.departure_city,
+            destination: data.memory_entities?.destination,
+            travelDates: data.memory_entities?.travel_dates
+          }
+        };
+      }
+      
+      // LEGACY: Handle old structure
       if (data.destinations || data.stays || data.activities || data.itinerary || data.flights) {
         const destinations = data.destinations?.plan || [];
         const stays = data.stays?.stays || [];
@@ -557,8 +841,13 @@ export default function ChatInterface({ onBackToHome }) {
     setShowDatePicker(false); // Hide date picker
     setShowInterestMultiSelect(false); // Hide multi-select interests
     
+    // OPTIMIZATION: When UI selections are present, send simple "ok" to skip entity extraction
+    // The backend will use ui_selections directly instead of extracting from text
+    const hasUiSelections = Object.keys(uiSelections).length > 0;
+    const queryToSend = hasUiSelections ? 'ok' : query;
+    
     const userMessage = {
-      message: query,
+      message: query,  // Show actual selection to user
       sentTime: formatTimestamp(),
       sender: "user",
       direction: "outgoing"
@@ -567,7 +856,7 @@ export default function ChatInterface({ onBackToHome }) {
     
     setLoading(true);
     try {
-      const result = await fetchItinerary(query, uiSelections);
+      const result = await fetchItinerary(queryToSend, uiSelections);  // Send "ok" with ui_selections
       console.log('API result:', result);
       
       // Clear UI selections after sending (they've been used for this query)

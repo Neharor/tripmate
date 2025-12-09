@@ -149,7 +149,7 @@ export default function FlightCardCompact({ flights, departureCity, destination,
                   {destination ? destination.split(',')[0] : 'Arrival'}
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                  Same day
+                  {flight.departure_date || 'Same day'}
                 </Typography>
               </Box>
             </Box>
@@ -162,34 +162,79 @@ export default function FlightCardCompact({ flights, departureCity, destination,
             </Typography>
           </Box>
 
-          {/* Book Button */}
-          <Box sx={{ p: 2.5, bgcolor: '#ffffff' }}>
-            <Button 
-              variant="contained" 
-              fullWidth 
-              size="large"
-              endIcon={<OpenInNewIcon />}
-              onClick={() => window.open(flight.booking_url, '_blank')}
-              sx={{ 
-                bgcolor: '#16a34a', 
-                py: 1.8, 
-                fontSize: '16px', 
-                fontWeight: 800, 
-                textTransform: 'none',
-                boxShadow: '0 4px 14px rgba(22, 163, 74, 0.4)',
-                borderRadius: '10px',
-                '&:hover': { 
-                  bgcolor: '#15803d',
-                  boxShadow: '0 6px 20px rgba(22, 163, 74, 0.5)',
-                  transform: 'translateY(-2px)'
-                },
-                transition: 'all 0.2s'
-              }}>
-              Book Now on {flight.airline} Website
-            </Button>
+          {/* Book Buttons - Multiple Options */}
+          <Box sx={{ p: 2.5, bgcolor: '#ffffff', borderTop: '1px solid #e2e8f0' }}>
+            <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 600, mb: 2 }}>
+              🎫 Book this flight:
+            </Typography>
+            
+            {flight.booking_links && flight.booking_links.length > 0 ? (
+              <Box sx={{ display: 'grid', gap: 1.5 }}>
+                {flight.booking_links.map((link, linkIdx) => (
+                  <Button
+                    key={linkIdx}
+                    variant={linkIdx === 0 ? 'contained' : 'outlined'}
+                    fullWidth
+                    endIcon={<OpenInNewIcon />}
+                    onClick={() => window.open(link.url, '_blank')}
+                    sx={{
+                      py: 1.5,
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      borderRadius: '10px',
+                      ...(linkIdx === 0 ? {
+                        bgcolor: '#3b82f6',
+                        boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)',
+                        '&:hover': {
+                          bgcolor: '#2563eb',
+                          boxShadow: '0 6px 20px rgba(59, 130, 246, 0.5)',
+                          transform: 'translateY(-2px)'
+                        }
+                      } : {
+                        borderColor: '#cbd5e1',
+                        color: '#475569',
+                        '&:hover': {
+                          borderColor: '#3b82f6',
+                          bgcolor: '#eff6ff',
+                          color: '#3b82f6'
+                        }
+                      }),
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {link.name}
+                  </Button>
+                ))}
+              </Box>
+            ) : (
+              <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                endIcon={<OpenInNewIcon />}
+                onClick={() => window.open(`https://www.google.com/flights?hl=en#flt=${departureCity?.split(',')[0]}.${destination?.split(',')[0]}`, '_blank')}
+                sx={{
+                  bgcolor: '#16a34a',
+                  py: 1.8,
+                  fontSize: '16px',
+                  fontWeight: 800,
+                  textTransform: 'none',
+                  boxShadow: '0 4px 14px rgba(22, 163, 74, 0.4)',
+                  borderRadius: '10px',
+                  '&:hover': {
+                    bgcolor: '#15803d',
+                    boxShadow: '0 6px 20px rgba(22, 163, 74, 0.5)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.2s'
+                }}>
+                Book Now on Google Flights
+              </Button>
+            )}
             
             <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#64748b', mt: 1.5 }}>
-              💳 Pay directly to airline • Instant confirmation • {(flight.price_one_way || Math.round(flight.price_round_trip / 2))?.toString().startsWith('$') ? (flight.price_one_way || Math.round(flight.price_round_trip / 2)) : `$${flight.price_one_way || Math.round(flight.price_round_trip / 2)}`} one-way
+              💳 Instant confirmation • Best price guarantee
             </Typography>
           </Box>
         </Card>

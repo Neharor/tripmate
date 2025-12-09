@@ -204,11 +204,18 @@ IMPORTANT: Look for "Departure city:" in the conversation to find the origin."""
         
         print(f"✅ Found {len(all_flights)} flights from Amadeus")
         
-        # Filter best options: Cheapest, Fastest, Earliest
+        # Filter best options: Cheapest, Fastest, Best value
         best_flights = self._filter_best_flights(all_flights)
         
-        # Let LLM format the results nicely
-        return self._llm_format_real_flights(best_flights, details)
+        # Return structured data for enhanced format processing
+        return {
+            'flights': best_flights,
+            'origin': details.get('origin', 'Unknown'),
+            'destination': details.get('destination', 'Unknown'),
+            'departure_date': details.get('departure_date'),
+            'data_source': 'Amadeus API',
+            'flight_text': self._generate_flight_summary(best_flights, details)
+        }
     
     def _format_flight_results(self, flights, details):
         """
@@ -356,9 +363,45 @@ RESPOND WITH ONLY THE JSON ARRAY."""
             
             flights = json.loads(clean_response)
             
-            # Return structured flight data
+            # Convert LLM flights to structured format compatible with enhanced display
+            structured_flights = []
+            for flight in flights:
+                structured_flight = {
+                    'id': f"llm_{flight.get('airline', 'unknown')}_{flight.get('flight_number', '000')}",
+                    'price': flight.get('price_round_trip', flight.get('price_one_way', 300)),
+                    'currency': 'USD',
+                    'itineraries': [{
+                        'segments': [{
+                            'airline': flight.get('airline', 'Unknown'),
+                            'airline_name': flight.get('airline', 'Unknown'),
+                            'flight_number': flight.get('flight_number', 'XX000'),
+                            'departure': {
+                                'airport': origin,
+                                'time': f"2025-12-09T{flight.get('departure_time', '12:00')}:00"
+                            },
+                            'arrival': {
+                                'airport': destination,
+                                'time': f"2025-12-09T{flight.get('arrival_time', '15:00')}:00"
+                            },
+                            'duration': flight.get('duration', '3h 00m')
+                        }],
+                        'duration': flight.get('duration', '3h 00m'),
+                        'duration_mins': self._parse_duration_to_mins(flight.get('duration', '3h 00m')),
+                        'is_direct': flight.get('stops', 0) == 0,
+                        'stops': flight.get('stops', 0)
+                    }],
+                    'is_real': False,  # Mark as LLM generated
+                    'data_source': 'LLM Suggestions'
+                }
+                structured_flights.append(structured_flight)
+            
+            # Return structured data for enhanced format processing
             return {
-                "flights": flights
+                'flights': structured_flights,
+                'origin': origin,
+                'destination': destination,
+                'data_source': 'LLM Suggestions',
+                'flight_text': f"Generated {len(flights)} flight suggestions for {origin} → {destination}"
             }
             
         except Exception as e:
@@ -549,5 +592,40 @@ RESPOND WITH ONLY THE JSON ARRAY."""
             'NZ': 'Air New Zealand', 'JL': 'Japan Airlines', 'NH': 'ANA'
         }
         return airline_names.get(code, code)
+    
+    def _generate_flight_summary(self, flights, details):
+        """Generate a text summary of flights for compatibility"""
+        if not flights:
+            return "No flights found for your search criteria."
+        
+        summary = f"Found {len(flights)} flight options from {details.get('origin', 'your city')} to {details.get('destination')}:\n\n"
+        
+        for i, flight in enumerate(flights):
+            if flight.get('is_real'):
+                itinerary = flight['itineraries'][0]
+                main_segment = itinerary['segments'][0]
+                airline_name = main_segment.get('airline_name', 'Unknown')
+                price = flight['price']
+                stops = "Direct" if itinerary['is_direct'] else f"{itinerary['stops']} stops"
+                
+                summary += f"Option {i+1}: {airline_name} - ${price:.0f} ({stops})\n"
+        
+        return summary
+    
+    def _parse_duration_to_mins(self, duration_str):
+        """Parse duration like '3h 45m' to minutes"""
+        import re
+        hours = 0
+        minutes = 0
+        
+        hour_match = re.search(r'(\d+)h', duration_str)
+        if hour_match:
+            hours = int(hour_match.group(1))
+        
+        min_match = re.search(r'(\d+)m', duration_str)
+        if min_match:
+            minutes = int(min_match.group(1))
+        
+        return hours * 60 + minutes
 
 

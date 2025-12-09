@@ -16,10 +16,10 @@ export default function DateRangePicker({ onSelectDates, destination }) {
 
   const handleConfirm = () => {
     if (startDate && endDate) {
-      // Calculate duration in days
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+      // Calculate duration in days using UTC to avoid timezone issues
+      const start = new Date(startDate + 'T00:00:00');
+      const end = new Date(endDate + 'T00:00:00');
+      const durationDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
       
       // Validate maximum duration (90 days)
       if (durationDays > 90) {
@@ -48,9 +48,9 @@ export default function DateRangePicker({ onSelectDates, destination }) {
   // Calculate trip duration
   const getTripDuration = () => {
     if (!startDate || !endDate) return null;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
     return days;
   };
 
@@ -88,7 +88,7 @@ export default function DateRangePicker({ onSelectDates, destination }) {
           <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <Box sx={{ flex: 1, minWidth: '200px' }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, opacity: 0.9, fontWeight: 600 }}>
-                Start Date (Year: 2025)
+                Start Date {startDate && `(Year: ${new Date(startDate).getFullYear()})`}
               </Typography>
               <TextField
                 type="date"
@@ -116,7 +116,7 @@ export default function DateRangePicker({ onSelectDates, destination }) {
 
             <Box sx={{ flex: 1, minWidth: '200px' }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, opacity: 0.9, fontWeight: 600 }}>
-                End Date (Year: 2025)
+                End Date {endDate && `(Year: ${new Date(endDate).getFullYear()})`}
               </Typography>
               <TextField
                 type="date"

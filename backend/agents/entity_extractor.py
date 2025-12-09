@@ -35,6 +35,23 @@ Your job: Identify and extract travel-related entities in JSON format."""
             current_memory: Current semantic memory state (what's already known)
         """
         try:
+            # FAST PATH: Try regex extraction first for simple patterns (instant, no LLM call)
+            # Get last user message for quick pattern matching
+            lines = conversation_text.strip().split('\n')
+            last_user_message = ""
+            for line in reversed(lines):
+                if line.startswith("User:"):
+                    last_user_message = line.replace("User:", "").strip()
+                    break
+            
+            if last_user_message:
+                # Try fast regex extraction for common patterns
+                quick_extract = self._quick_extract(last_user_message, current_memory)
+                if quick_extract.get("_fast_path_success"):
+                    # Regex found a clear match - skip expensive LLM call
+                    print(f"⚡ FAST EXTRACT: Skipped LLM, used regex for '{last_user_message[:50]}'")
+                    del quick_extract["_fast_path_success"]  # Remove internal flag
+                    return quick_extract
             # Build context about what's already known
             memory_context = ""
             if current_memory:
@@ -138,6 +155,90 @@ RESPOND WITH ONLY THE JSON OBJECT."""
             print(f"Entity extraction error: {str(e)}")
             # Fallback to basic regex extraction
             return self._fallback_extraction(conversation_text)
+    
+    def _quick_extract(self, text: str, current_memory: dict = None) -> dict:
+        """
+        FAST regex-based extraction for simple, unambiguous inputs
+        Returns dict with "_fast_path_success": True if confident match found
+        """
+        text_lower = text.lower().strip()
+        
+        entities = {
+            "destination": None,
+            "departure_city": None,
+            "duration": None,
+            "budget": None,
+            "budget_type": None,
+            "interests": [],
+            "food_preference": None,
+            "cuisine_preference": None,
+            "travel_dates": None,
+            "travel_time_preference": None,
+            "companions": None,
+            "dietary_preference": [],  # Array for orchestrator compatibility
+            "_fast_path_success": False  # Flag to indicate if we found a clear match
+        }
+        
+        # Pattern 1: Budget (e.g., "$100/day", "$1000", "100 dollars per day")
+        budget_match = re.search(r'\$(\d+)\s*(?:/day|per\s+day)?', text_lower)
+        if budget_match and len(text_lower) < 20:  # Simple budget response
+            entities["budget"] = f"${budget_match.group(1)}/day" if '/day' in text_lower or 'per day' in text_lower else f"${budget_match.group(1)}"
+            entities["budget_type"] = "daily" if '/day' in text_lower or 'per day' in text_lower else "total"
+            entities["_fast_path_success"] = True
+            return entities
+        
+        # Pattern 2: Date range (e.g., "Dec 8, 2025 to Dec 10, 2025")
+        date_match = re.search(r'(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d+,?\s+\d{4}\s+to\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d+,?\s+\d{4}', text_lower)
+        if date_match:
+            entities["travel_dates"] = date_match.group(0).title()
+            entities["duration"] = date_match.group(0).title()
+            entities["_fast_path_success"] = True
+            return entities
+        
+        # Pattern 3: Simple city/country names (look for capitalized words without special chars)
+        # Only if memory indicates we're asking for destination or departure_city
+        if current_memory:
+            if not current_memory.get("destination") and re.match(r'^[A-Z][a-z]+(?:,?\s+[A-Z][a-z]+)*$', text.strip()):
+                # Likely a destination (capitalized city/country)
+                entities["destination"] = text.strip()
+                entities["_fast_path_success"] = True
+                return entities
+            elif current_memory.get("destination") and not current_memory.get("departure_city") and re.match(r'^[A-Z][a-z]+(?:,?\s+[A-Z][a-z]+)*$', text.strip()):
+                # Likely departure city
+                entities["departure_city"] = text.strip()
+                entities["_fast_path_success"] = True
+                return entities
+        
+        # Pattern 4: Interests list (comma-separated, e.g., "Food, Shopping, Nightlife")
+        if ',' in text and current_memory and not current_memory.get("interests"):
+            interest_candidates = [i.strip().title() for i in text.split(',')]
+            if all(len(i) < 20 and i.isalpha() or ' ' in i for i in interest_candidates):
+                entities["interests"] = interest_candidates
+                entities["_fast_path_success"] = True
+                return entities
+        
+        # Pattern 5: Food/Dietary preferences
+        # Note: We set BOTH food_preference (single) and dietary_preference (array) for compatibility
+        food_prefs = {'vegetarian': 'Vegetarian', 'vegan': 'Vegan', 'non-vegetarian': 'Non-Vegetarian', 
+                      'kosher': 'Kosher', 'gluten-free': 'Gluten-Free', 'lactose-free': 'Lactose-Free',
+                      'no restrictions': 'No Restrictions', 'any': 'No Restrictions'}
+        for key, val in food_prefs.items():
+            if key in text_lower and len(text_lower) < 30:
+                entities["food_preference"] = val  # Single value for backward compatibility
+                entities["dietary_preference"] = [val]  # Array for orchestrator
+                entities["_fast_path_success"] = True
+                return entities
+        
+        # Pattern 6: Travel companions
+        companions = {'solo': 'solo', 'couple': 'couple', 'family': 'family', 'friends': 'friends'}
+        for key, val in companions.items():
+            if key in text_lower and len(text_lower) < 30:
+                entities["companions"] = val
+                entities["_fast_path_success"] = True
+                return entities
+        
+        # No clear match - return with _fast_path_success = False (will fall back to LLM)
+        return entities
     
     def _fallback_extraction(self, text: str) -> dict:
         """

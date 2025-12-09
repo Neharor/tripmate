@@ -1,9 +1,7 @@
-from flask import Flask, request, jsonify, send_file, session
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
 import os
-import json
-import datetime
 from dotenv import load_dotenv
 from collections import defaultdict
 import certifi
@@ -234,16 +232,25 @@ def generate_itinerary():
         
         # Extract entities from current query and update semantic memory
         try:
-            # Get full conversation context for entity extraction (including agent responses)
-            conversation_lines = []
-            for turn in memory.short_term:
-                conversation_lines.append(f"User: {turn['user']}")
-                if turn.get('agent'):
-                    conversation_lines.append(f"Assistant: {turn['agent']}")
-            conversation_text = "\n".join(conversation_lines)
+            # FAST PATH: If UI selections are provided, skip entity extraction for simple acknowledgments
+            # (like selecting from chips/dropdowns - no need to run LLM)
+            simple_acknowledgments = ['ok', 'yes', 'sure', 'yep', 'yeah', 'go ahead', 'proceed', 'continue']
+            is_simple_ack = query.lower().strip() in simple_acknowledgments
             
-            # Pass current memory state so entity extractor knows what's already set
-            entities = entity_extractor.extract_entities(conversation_text, current_memory=memory.entities)
+            if ui_selections and is_simple_ack:
+                print(f"⚡ FAST PATH: UI selections detected with simple acknowledgment - skipping entity extraction")
+                entities = {}  # Empty - will use ui_selections below
+            else:
+                # Get full conversation context for entity extraction (including agent responses)
+                conversation_lines = []
+                for turn in memory.short_term:
+                    conversation_lines.append(f"User: {turn['user']}")
+                    if turn.get('agent'):
+                        conversation_lines.append(f"Assistant: {turn['agent']}")
+                conversation_text = "\n".join(conversation_lines)
+                
+                # Pass current memory state so entity extractor knows what's already set
+                entities = entity_extractor.extract_entities(conversation_text, current_memory=memory.entities)
             
             print(f"🔍 LLM Extracted: {entities}")
             print(f"📊 Current Memory: {memory.entities}")
@@ -254,15 +261,20 @@ def generate_itinerary():
             ui_selections = memory.get_context().get("ui_selections", {})
             conflicts_detected = []
             
-            # Extract entities from JUST this current query with last assistant context
-            # Include last assistant message for context awareness
-            last_turn_context = ""
-            if len(memory.short_term) >= 2 and memory.short_term[-2].get('agent'):
-                last_turn_context = f"Assistant: {memory.short_term[-2]['agent']}\nUser: {query}"
+            # FAST PATH: Skip conflict detection if user used UI selections (no typed conflicts possible)
+            if not (ui_selections and is_simple_ack):
+                # Extract entities from JUST this current query with last assistant context
+                # Include last assistant message for context awareness
+                last_turn_context = ""
+                if len(memory.short_term) >= 2 and memory.short_term[-2].get('agent'):
+                    last_turn_context = f"Assistant: {memory.short_term[-2]['agent']}\nUser: {query}"
+                else:
+                    last_turn_context = f"User: {query}"
+                
+                current_query_entities = entity_extractor.extract_entities(last_turn_context, current_memory={})
             else:
-                last_turn_context = f"User: {query}"
-            
-            current_query_entities = entity_extractor.extract_entities(last_turn_context, current_memory={})
+                print(f"⚡ FAST PATH: Skipping conflict detection for UI selections")
+                current_query_entities = {}
             
             for key in ["destination", "departure_city", "duration", "budget", "travel_dates"]:
                 # Only flag conflict if:
@@ -432,6 +444,30 @@ def generate_itinerary():
             if entities.get("cuisine_preference"):
                 memory.update_entity("cuisine_preference", entities["cuisine_preference"])
             
+            # FALLBACK: If cuisine_preference still missing, use simple regex to detect common cuisines
+            if not memory.entities.get("cuisine_preference"):
+                cuisine_keywords = {
+                    'indian': 'Indian',
+                    'chinese': 'Chinese', 
+                    'japanese': 'Japanese',
+                    'thai': 'Thai',
+                    'italian': 'Italian',
+                    'mexican': 'Mexican',
+                    'french': 'French',
+                    'korean': 'Korean',
+                    'vietnamese': 'Vietnamese',
+                    'local': 'Local/Traditional',
+                    'traditional': 'Local/Traditional',
+                    'street food': 'Street Food',
+                    'fine dining': 'Fine Dining'
+                }
+                query_lower = query.lower()
+                for keyword, cuisine_name in cuisine_keywords.items():
+                    if keyword in query_lower:
+                        print(f"✅ REGEX FALLBACK: Detected cuisine '{cuisine_name}' from query")
+                        memory.update_entity("cuisine_preference", cuisine_name)
+                        break
+            
             if entities.get("travel_dates"):
                 memory.update_entity("travel_dates", entities["travel_dates"])
             
@@ -440,6 +476,14 @@ def generate_itinerary():
             
             if entities.get("companions"):
                 memory.update_entity("companions", entities["companions"])
+            
+            # Handle travel_companion → companions mapping
+            if entities.get("travel_companion"):
+                memory.update_entity("companions", entities["travel_companion"])
+            
+            # Handle dietary preferences
+            if entities.get("dietary_preference"):
+                memory.update_entity("dietary_preference", entities["dietary_preference"])
                 
         except Exception as e:
             print(f"Entity extraction error (non-fatal): {str(e)}")
