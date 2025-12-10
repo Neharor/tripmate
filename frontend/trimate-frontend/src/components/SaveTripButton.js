@@ -11,7 +11,113 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import SaveIcon from '@mui/icons-material/Save';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../api';
+
+// ViewItineraryButton Component
+function ViewItineraryButton({ tripData }) {
+  const [open, setOpen] = useState(false);
+
+  if (!tripData || !tripData.itinerary_text) return null;
+
+  return (
+    <>
+      <Button
+        startIcon={<VisibilityIcon />}
+        variant="outlined"
+        size="large"
+        onClick={() => setOpen(true)}
+        sx={{
+          borderColor: '#3b82f6',
+          color: '#3b82f6',
+          fontWeight: 600,
+          textTransform: 'none',
+          px: 3,
+          py: 1.5,
+          borderRadius: '12px',
+          '&:hover': {
+            borderColor: '#2563eb',
+            bgcolor: 'rgba(59, 130, 246, 0.04)'
+          }
+        }}
+      >
+        View Itinerary
+      </Button>
+
+      <Dialog 
+        open={open} 
+        onClose={() => setOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', maxHeight: '80vh' }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          bgcolor: '#f8fafc',
+          borderBottom: '1px solid #e2e8f0'
+        }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 600, color: '#1e293b' }}>
+              🗺️ Trip Itinerary
+            </Typography>
+            <Typography variant="subtitle2" sx={{ color: '#64748b', mt: 0.5 }}>
+              {tripData.destination || 'Your Destination'}
+            </Typography>
+          </Box>
+          <Button
+            onClick={() => setOpen(false)}
+            sx={{ minWidth: 'auto', p: 1, borderRadius: '8px' }}
+          >
+            <CloseIcon />
+          </Button>
+        </DialogTitle>
+        
+        <DialogContent sx={{ p: 0 }}>
+          <Box sx={{ 
+            p: 3, 
+            maxHeight: '60vh', 
+            overflow: 'auto',
+            '& h1, & h2, & h3': { color: '#1e293b', fontWeight: 600 },
+            '& p': { color: '#475569', lineHeight: 1.6 },
+            '& ul, & ol': { color: '#475569' },
+            '& strong': { color: '#1e293b' }
+          }}>
+            <div 
+              dangerouslySetInnerHTML={{ 
+                __html: tripData.itinerary_text
+                  ?.replace(/\n/g, '<br/>')
+                  ?.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  ?.replace(/#{1,6}\s*(.*?)\n/g, '<h3>$1</h3>')
+                  ?.replace(/•/g, '•')
+              }} 
+            />
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ p: 3, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+          <Button 
+            onClick={() => setOpen(false)}
+            variant="contained"
+            sx={{ 
+              bgcolor: '#3b82f6',
+              px: 4,
+              py: 1,
+              borderRadius: '8px',
+              textTransform: 'none'
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
 
 export default function SaveTripButton({ tripData, onSaved }) {
   const [open, setOpen] = useState(false);
@@ -103,6 +209,11 @@ export default function SaveTripButton({ tripData, onSaved }) {
     setLoading(true);
     setError(null);
     
+    console.log('🔍 FRONTEND: tripData type:', typeof tripData);
+    console.log('🔍 FRONTEND: tripData:', tripData);
+    console.log('🔍 FRONTEND: tripData.flights type:', typeof tripData.flights);
+    console.log('🔍 FRONTEND: tripData.stays type:', typeof tripData.stays);
+    
     try {
       const response = await fetch(`${API_BASE_URL}/api/trips`, {
         method: 'POST',
@@ -139,27 +250,31 @@ export default function SaveTripButton({ tripData, onSaved }) {
 
   return (
     <>
-      <Button
-        variant="contained"
-        startIcon={<SaveIcon />}
-        onClick={handleOpen}
-        sx={{
-          bgcolor: '#10b981',
-          color: '#ffffff',
-          fontWeight: 600,
-          textTransform: 'none',
-          px: 3,
-          py: 1.5,
-          borderRadius: '12px',
-          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-          '&:hover': {
-            bgcolor: '#059669',
-            boxShadow: '0 6px 16px rgba(16, 185, 129, 0.4)'
-          }
-        }}
-      >
-        Save This Trip
-      </Button>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          onClick={handleOpen}
+          sx={{
+            bgcolor: '#10b981',
+            color: '#ffffff',
+            fontWeight: 600,
+            textTransform: 'none',
+            px: 3,
+            py: 1.5,
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+            '&:hover': {
+              bgcolor: '#059669',
+              boxShadow: '0 6px 16px rgba(16, 185, 129, 0.4)'
+            }
+          }}
+        >
+          Save This Trip
+        </Button>
+        
+        <ViewItineraryButton tripData={tripData} />
+      </Box>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>

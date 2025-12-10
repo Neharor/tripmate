@@ -41,9 +41,27 @@ def create():
     """
     data = request.get_json()
     
+    # DEBUG
+    print(f"\n🔍 DEBUG ROUTE: request.data type = {type(request.data)}")
+    print(f"🔍 DEBUG ROUTE: request.data = {request.data[:200] if request.data else 'None'}")
+    print(f"🔍 DEBUG ROUTE: data type = {type(data)}")
+    print(f"🔍 DEBUG ROUTE: data = {str(data)[:200] if data else 'None'}")
+    
+    # FIX: If data is a string, try to parse it as JSON
+    if isinstance(data, str):
+        print(f"⚠️ WARNING: data is a string, attempting to parse as JSON")
+        import json
+        try:
+            data = json.loads(data)
+            print(f"✅ Successfully parsed string to dict")
+        except json.JSONDecodeError as e:
+            print(f"❌ Failed to parse JSON: {e}")
+            return jsonify({'error': 'Invalid JSON data'}), 400
+    
     if not data or not data.get('destination'):
         return jsonify({'error': 'Destination is required'}), 400
     
+    print(f"🔍 DEBUG ROUTE: Calling create_trip with user_id={request.user_id}")
     result, status = create_trip(request.user_id, data)
     return jsonify(result), status
 

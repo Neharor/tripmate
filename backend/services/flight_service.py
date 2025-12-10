@@ -58,13 +58,14 @@ class FlightService:
             return self._fallback_flights(origin, destination, departure_date, return_date)
         
         try:
-            # Search for flight offers
+            # Search for flight offers (request USD pricing for universal understanding)
             response = self.amadeus.shopping.flight_offers_search.get(
                 originLocationCode=origin,
                 destinationLocationCode=destination,
                 departureDate=departure_date,
                 returnDate=return_date,
                 adults=adults,
+                currencyCode='USD',
                 max=max_results
             )
             
@@ -281,6 +282,10 @@ class FlightService:
         Get IATA airport code for a city
         This is a simple lookup - in production, use Amadeus Airport Search API
         """
+        # Extract city name before comma (e.g., "Dubai, UAE" -> "Dubai")
+        if ',' in city_name:
+            city_name = city_name.split(',')[0].strip()
+        
         airport_codes = {
             'bali': 'DPS',
             'denpasar': 'DPS',
@@ -298,4 +303,7 @@ class FlightService:
             'delhi': 'DEL'
         }
         
-        return airport_codes.get(city_name.lower(), 'UNKNOWN')
+        code = airport_codes.get(city_name.lower(), 'UNKNOWN')
+        if code != 'UNKNOWN':
+            print(f"✈️ Mapped '{city_name}' to airport code: {code}")
+        return code

@@ -42,8 +42,24 @@ def create_trip():
     }
     """
     try:
+        print("\n🔍 === TRIP SAVE REQUEST START ===")
         user_id = session.get('user_id')
+        print(f"🔍 BACKEND: user_id from session: {user_id}")
+        
         trip_data = request.get_json()
+        print(f"🔍 BACKEND: Raw request data type: {type(trip_data)}")
+        print(f"🔍 BACKEND: Raw request data: {trip_data}")
+        
+        if not isinstance(trip_data, dict):
+            print(f"❌ BACKEND: Expected dict, got {type(trip_data)}")
+            return jsonify({"error": f"Invalid data format: expected object, got {type(trip_data).__name__}"}), 400
+        
+        print(f"🔍 BACKEND: trip_data keys: {list(trip_data.keys())}")
+        
+        # Check specific fields that might cause issues
+        for key in ['itinerary', 'flights', 'stays', 'budget', 'preferences']:
+            if key in trip_data:
+                print(f"🔍 BACKEND: {key} type: {type(trip_data[key])}, value: {trip_data[key]}")
         
         # Convert date strings to datetime objects
         if 'start_date' in trip_data and isinstance(trip_data['start_date'], str):
@@ -63,7 +79,12 @@ def create_trip():
                 trip_data['end_date'] = parser.parse(trip_data['end_date'])
         
         # Create trip
+        print(f"🔍 BACKEND: About to call trip_model.create_trip with user_id={user_id}")
+        print(f"🔍 BACKEND: trip_model type: {type(trip_model)}")
+        print(f"🔍 BACKEND: Processed trip_data keys: {list(trip_data.keys())}")
+        
         trip = trip_model.create_trip(user_id, trip_data)
+        print(f"🔍 BACKEND: Trip created successfully with id: {trip.get('_id')}")
         
         # Update user stats
         user_model.update_stats(user_id, trip_data)
@@ -82,7 +103,12 @@ def create_trip():
         }), 201
         
     except Exception as e:
-        print(f"❌ Error creating trip: {str(e)}")
+        import traceback
+        print(f"\n❌ ERROR creating trip: {str(e)}")
+        print(f"❌ Error type: {type(e).__name__}")
+        print(f"❌ Full traceback:")
+        print(traceback.format_exc())
+        print("🔍 === TRIP SAVE REQUEST END (ERROR) ===\n")
         return jsonify({"error": f"Failed to save trip: {str(e)}"}), 500
 
 

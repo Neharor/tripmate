@@ -65,8 +65,11 @@ const DestinationCarousel = ({ onDestinationSelect }) => {
   const fetchTrendingDestinations = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Fetching trending destinations from:', `${API_BASE_URL}/api/trending-destinations`);
       const response = await fetch(`${API_BASE_URL}/api/trending-destinations`);
+      console.log('📡 Response status:', response.status);
       const data = await response.json();
+      console.log('📊 Trending data received:', data);
       
       if (data.success || data.destinations) {
         // Transform backend data to frontend format

@@ -22,6 +22,7 @@ import MapView from './components/MapView';
 import DestinationAutocomplete from './components/DestinationAutocomplete';
 import DateRangePicker from './components/DateRangePicker';
 import SaveTripButton from './components/SaveTripButton';
+import ItineraryCard from './components/ItineraryCard';
 
 export default function ChatInterface({ onBackToHome }) {
   // Generate unique session ID for this chat session
@@ -41,6 +42,46 @@ export default function ChatInterface({ onBackToHome }) {
   const [destination, setDestination] = useState(null);
   const [travelDates, setTravelDates] = useState(null);
   const [currentTripData, setCurrentTripData] = useState(null); // For saving trip
+
+  // Parse itinerary text into structured format
+  const parseItineraryText = (text, duration) => {
+    const days = [];
+    const dayPattern = /Day (\d+)[:\s-]*(.*?)(?=Day \d+|$)/gis;
+    let match;
+    
+    while ((match = dayPattern.exec(text)) !== null) {
+      const dayNum = parseInt(match[1]);
+      const dayContent = match[2].trim();
+      
+      // Extract activities from day content
+      const activities = dayContent
+        .split(/[•\-\n]/) // Split by bullet points, dashes, or newlines
+        .map(activity => activity.trim())
+        .filter(activity => activity.length > 0 && !activity.match(/^\*\*|^#/))
+        .slice(0, 5); // Limit to 5 activities per day
+      
+      if (activities.length > 0) {
+        days.push({
+          day: dayNum,
+          date: null, // Can be calculated from start_date if needed
+          activities: activities
+        });
+      }
+    }
+    
+    // If no structured days found, create simple structure
+    if (days.length === 0) {
+      for (let i = 1; i <= (duration || 3); i++) {
+        days.push({
+          day: i,
+          date: null,
+          activities: [`Day ${i} activities`, 'Explore destination', 'Local cuisine']
+        });
+      }
+    }
+    
+    return days;
+  };
   
   // Comprehensive destination options - popular countries and cities worldwide
   const destinationOptions = [
@@ -233,72 +274,85 @@ export default function ChatInterface({ onBackToHome }) {
           {/* 3. Itinerary - Third */}
           {itineraryText && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                📅 Your Itinerary
+              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                📅 Your Daily Itinerary
               </Typography>
-              {/* Parse Day-by-Day itinerary into clean cards */}
-              <Box sx={{ display: 'grid', gap: 2 }}>
+              {/* Parse and render formatted itinerary cards */}
+              <Box>
                 {(() => {
-                  // Strip HTML tags and extract Day sections
-                  const cleanText = itineraryText.replace(/<[^>]+>/g, '').replace(/\n\s*\n/g, '\n');
+                  // Parse structured itinerary from currentTripData if available
+                  if (currentTripData && currentTripData.itinerary && Array.isArray(currentTripData.itinerary)) {
+                    return currentTripData.itinerary.map((day, idx) => (
+                      <ItineraryCard 
+                        key={idx} 
+                        dayData={day} 
+                        dayNumber={day.day || idx + 1} 
+                      />
+                    ));
+                  }
+                  
+                  // Fallback: Parse from itinerary text with better HTML cleaning
+                  const cleanText = itineraryText
+                    .replace(/<br\s*\/?>/gi, '\n') // Convert <br> tags to newlines
+                    .replace(/<[^>]+>/g, '') // Remove all other HTML tags
+                    .replace(/&nbsp;/g, ' ') // Replace HTML entities
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/\n\s*\n/g, '\n'); // Normalize line breaks
                   
                   // Find the "Daily Itinerary" section
                   const itineraryMatch = cleanText.match(/##\s*📅\s*Daily Itinerary\s*([\s\S]*?)(?=\n##|$)/i);
-                  const itinerarySection = itineraryMatch ? itineraryMatch[1] : cleanText;
                   
-                  // Split into Day sections - use split instead of regex exec loop
-                  const days = [];
-                  const daySections = itinerarySection.split(/(?=###\s*\*\*Day\s*\d+\*\*)/);
-                  
-                  daySections.forEach((section, idx) => {
-                    const dayMatch = section.match(/###\s*\*\*Day\s*(\d+)\*\*\s*-\s*([^\n]+)/);
-                    if (dayMatch) {
-                      const dayNum = dayMatch[1];
-                      const date = dayMatch[2].trim();
+                  if (!itineraryMatch) {
+                    // Try to find any Day patterns in the full text - more flexible pattern
+                    const dayPattern = /(?:###\s*)?(?:\*\*)?Day\s*(\d+)(?:\*\*)?\s*(?:-\s*)?([^\n]*)([\s\S]*?)(?=(?:###\s*)?(?:\*\*)?Day\s*\d+|$)/gi;
+                    const days = [];
+                    let match;
+                    
+                    while ((match = dayPattern.exec(cleanText)) !== null) {
+                      const dayNum = parseInt(match[1]);
+                      let date = match[2] ? match[2].trim() : '';
+                      const content = match[3].trim();
                       
-                      // Extract bullet points
-                      const items = section
+                      // Clean up date - remove HTML remnants
+                      date = date
+                        .replace(/<[^>]+>/g, '')
+                        .replace(/&nbsp;/g, ' ')
+                        .trim();
+                      
+                      // Extract activities from content - more flexible patterns
+                      const activities = content
                         .split('\n')
-                        .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•'))
-                        .map(line => line.replace(/^[-•]\s*/, '').trim())
-                        .filter(item => item.length > 0);
+                        .map(line => line.trim())
+                        .filter(line => 
+                          line.startsWith('-') || 
+                          line.startsWith('•') || 
+                          line.startsWith('*') ||
+                          (line.includes(':') && line.match(/\d+:\d+/)) // Include time-based activities
+                        )
+                        .map(line => line.replace(/^[-•*]\s*/, '').trim())
+                        .filter(item => item.length > 0 && !item.match(/^#+/)); // Filter out headers
                       
-                      if (items.length > 0) {
-                        days.push({ title: `Day ${dayNum} - ${date}`, items });
+                      if (activities.length > 0) {
+                        days.push({
+                          day: dayNum,
+                          date: date,
+                          activities: activities
+                        });
                       }
                     }
-                  });
-                  
-                  // Fallback: If no structured days found, try simple "Day X:" format
-                  if (days.length === 0) {
-                    cleanText.split('\n').reduce((daysList, line) => {
-                      const dayHeader = line.match(/^\s*Day\s*(\d+)[\s:]*(.*)$/i);
-                      if (dayHeader) {
-                        daysList.push({ title: `Day ${dayHeader[1]}${dayHeader[2] ? `: ${dayHeader[2]}` : ''}`, items: [] });
-                      } else if (line.trim() && (line.trim().startsWith('-') || line.trim().startsWith('•'))) {
-                        if (daysList.length === 0) daysList.push({ title: 'Day 1', items: [] });
-                        const item = line.replace(/^[-•]\s*/, '').trim();
-                        if (item) daysList[daysList.length - 1].items.push(item);
-                      }
-                      return daysList;
-                    }, days);
+                    
+                    return days.map((day, idx) => (
+                      <ItineraryCard 
+                        key={idx} 
+                        dayData={day} 
+                        dayNumber={day.day} 
+                      />
+                    ));
                   }
                   
-                  return days.map((day, idx) => (
-                    <Paper key={idx} sx={{ p: 3, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#fafafa' }}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1e293b', fontSize: '1.1rem' }}>
-                        {day.title}
-                      </Typography>
-                      <Box component="ul" sx={{ pl: 3, m: 0, listStyle: 'none' }}>
-                        {day.items.map((item, i) => (
-                          <li key={i} style={{ marginBottom: '12px', paddingLeft: '8px', borderLeft: '3px solid #60a5fa', display: 'flex', alignItems: 'flex-start' }}>
-                            <span style={{ marginRight: '8px', color: '#60a5fa' }}>•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </Box>
-                    </Paper>
-                  ));
+                  return null;
                 })()}
               </Box>
             </Box>
@@ -331,6 +385,29 @@ export default function ChatInterface({ onBackToHome }) {
                   console.log('Trip saved:', savedTrip);
                 }}
               />
+              
+              {/* Plan New Trip Button */}
+              <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid #d1fae5' }}>
+                <Typography variant="body2" sx={{ mb: 2, color: '#64748b' }}>
+                  Ready for another adventure?
+                </Typography>
+                <Button 
+                  variant="contained" 
+                  size="large"
+                  onClick={() => window.location.reload()}
+                  sx={{ 
+                    bgcolor: '#3b82f6',
+                    '&:hover': { bgcolor: '#2563eb' },
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    px: 4,
+                    py: 1.5,
+                    borderRadius: '10px'
+                  }}
+                >
+                  🚀 Plan New Trip
+                </Button>
+              </Box>
             </Box>
           )}
         </Box>
@@ -343,6 +420,49 @@ export default function ChatInterface({ onBackToHome }) {
         fontSize: '15px',
         lineHeight: '1.6',
         fontWeight: 400,
+        '& a': {
+          color: '#1976d2',
+          textDecoration: 'underline',
+          position: 'relative',
+          '&:hover': {
+            color: '#115293',
+          },
+          '&[title]:hover::after': {
+            content: 'attr(title)',
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            whiteSpace: 'nowrap',
+            zIndex: 1000,
+            marginBottom: '5px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          },
+          '&[title]:hover::before': {
+            content: '""',
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            borderWidth: '5px',
+            borderStyle: 'solid',
+            borderColor: 'rgba(0, 0, 0, 0.9) transparent transparent transparent',
+            marginBottom: '0px',
+            zIndex: 1000,
+          }
+        },
+        '& h3': {
+          marginTop: '20px',
+          marginBottom: '10px',
+          color: '#1976d2',
+          fontWeight: 600,
+        },
         '& .booking-carousel': {
           margin: '20px 0',
           padding: '15px',
@@ -387,7 +507,9 @@ export default function ChatInterface({ onBackToHome }) {
         }
       }}
       dangerouslySetInnerHTML={{ 
-        __html: msg.message.replace(/\n/g, '<br/>') 
+        __html: msg.message.includes('<a ') || msg.message.includes('<div') 
+          ? msg.message  // If HTML detected, don't modify
+          : msg.message.replace(/\n/g, '<br/>')  // Otherwise convert newlines
       }}
       />
     );
@@ -511,6 +633,7 @@ export default function ChatInterface({ onBackToHome }) {
             setShowCuisinePreference(false);
             setShowTravelCompanion(false);
             setShowDietaryPreference(true);
+
           } else if (fields.departure_city) {
             setShowDestinationAutocomplete(true);
             setShowDatePicker(false);
@@ -634,8 +757,11 @@ export default function ChatInterface({ onBackToHome }) {
 
       // Client-side safety net: if backend didn't ask, infer UI from last user message
       // This preserves the old "we used to select" experience.
+      // BUT: Don't show forms if trip is already complete (has visual cards or trip_complete)
       const lastUserMsg = messages.filter(m => m.sender === 'user').slice(-1)[0]?.message?.toLowerCase() || '';
-      if (!data.needs_clarification && !data.show_form_fields) {
+      if (!data.needs_clarification && !data.show_form_fields && 
+          data.agent_type !== 'visual_cards_with_data' && 
+          data.agent_type !== 'trip_complete') {
         if (/where|destination|go to|travel to/.test(lastUserMsg)) {
           setShowDestinationAutocomplete(true);
         } else if (/date|when|start|end|days|duration/.test(lastUserMsg)) {
@@ -656,7 +782,17 @@ export default function ChatInterface({ onBackToHome }) {
       }
       
       // NEW: Handle agent_type structure (visual_cards_with_data)
-      if (data.agent_type === 'visual_cards_with_data') {
+      if (data.agent_type === 'visual_cards_with_data' || data.agent_type === 'trip_complete') {
+        // CLEAR ALL FORMS - Trip is complete, no more questions needed!
+        setShowDestinationAutocomplete(false);
+        setShowDatePicker(false);
+        setShowInterestMultiSelect(false);
+        setShowFoodPreference(false);
+        setShowCuisinePreference(false);
+        setShowTravelCompanion(false);
+        setShowDietaryPreference(false);
+        setQuickOptions([]);
+        
         const flights = data.flights || [];  // Direct array
         const stays = data.stays || [];  // Direct array
         const itineraryText = data.itinerary_text || data.message || '';
@@ -684,33 +820,60 @@ export default function ChatInterface({ onBackToHome }) {
         
         // Prepare trip data for saving
         if (flights.length > 0 && itineraryText && stays.length > 0 && data.memory_entities) {
+          // Calculate duration from dates if duration is a date string
+          let durationDays = parseInt(data.memory_entities.duration || '5');
+          if (isNaN(durationDays) && data.memory_entities.travel_dates) {
+            const dates = data.memory_entities.travel_dates.split(/ to /i);
+            if (dates.length === 2) {
+              const start = new Date(dates[0].trim());
+              const end = new Date(dates[1].trim());
+              durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            }
+          }
+          
+          // Extract budget properly
+          let budgetPerDay = 100;
+          const budgetStr = data.memory_entities.budget || '';
+          const budgetMatch = budgetStr.match(/\$?(\d+)/);
+          if (budgetMatch) {
+            budgetPerDay = parseInt(budgetMatch[1]);
+          }
+          
+          // Create structured itinerary from text
+          const structuredItinerary = parseItineraryText(itineraryText, durationDays);
+          
           const tripData = {
             destination: data.memory_entities.destination || '',
             departure_city: data.memory_entities.departure_city || '',
-            duration_days: parseInt(data.memory_entities.duration || '5'),
-            start_date: data.memory_entities.travel_dates?.split(' to ')[0] || null,
-            end_date: data.memory_entities.travel_dates?.split(' to ')[1] || null,
+            duration_days: durationDays || 5,  // Changed from 'duration' to 'duration_days'
+            start_date: data.memory_entities.travel_dates?.split(/ to /i)[0]?.trim() || null,
+            end_date: data.memory_entities.travel_dates?.split(/ to /i)[1]?.trim() || null,
             budget: {
-              per_day: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100'),
-              total: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100') * parseInt(data.memory_entities.duration || '5')
+              per_day: budgetPerDay,
+              total: budgetPerDay * (durationDays || 5),
+              currency: 'USD'
             },
             preferences: {
               interests: data.memory_entities.interests || [],
               food_preference: data.memory_entities.food_preference || 'Any',
-              flight_time_preference: data.memory_entities.travel_time_preference || 'Anytime'
+              travel_style: data.memory_entities.companions || 'Solo Travel'
             },
             flights: {
-              outbound: JSON.stringify(flights[0])
+              departure: flights[0] ? {
+                airline: flights[0].airline || 'Unknown',
+                flight: flights[0].flight || '',
+                price: flights[0].price || 0,
+                duration: flights[0].duration || ''
+              } : {}
             },
             stays: stays.map(hotel => ({
-              name: hotel.name || '',
+              name: hotel.name || 'Hotel',
+              rating: hotel.rating || 4.5,
               price_per_night: hotel.price || 65,
-              total_nights: parseInt(data.memory_entities.duration || '5')
+              nights: durationDays || 5
             })),
-            itinerary: [{
-              day: 1,
-              activities: [{ name: itineraryText }]
-            }],
+            itinerary: structuredItinerary,
+            itinerary_text: itineraryText,  // Keep the full text for modal display
             bookable_activities: []
           };
           
@@ -773,21 +936,28 @@ export default function ChatInterface({ onBackToHome }) {
         
         // Prepare trip data for saving (if complete trip)
         if ((flights || flightText) && itineraryText && stays.length > 0 && data.memory_entities) {
+          // Calculate duration from dates if duration is a date string
+          let durationDays = parseInt(data.memory_entities.duration || '5');
+          if (isNaN(durationDays) && data.memory_entities.travel_dates) {
+            const dates = data.memory_entities.travel_dates.split(/ to /i);
+            if (dates.length === 2) {
+              const start = new Date(dates[0].trim());
+              const end = new Date(dates[1].trim());
+              durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            }
+          }
+          
           const tripData = {
             destination: data.memory_entities.destination || '',
             departure_city: data.memory_entities.departure_city || '',
-            duration_days: parseInt(data.memory_entities.duration || '5'),
-            start_date: data.memory_entities.travel_dates?.split(' to ')[0] || null,
-            end_date: data.memory_entities.travel_dates?.split(' to ')[1] || null,
-            budget: {
-              per_day: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100'),
-              total: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100') * parseInt(data.memory_entities.duration || '5')
-            },
-            preferences: {
-              interests: data.memory_entities.interests || [],
-              food_preference: data.memory_entities.food_preference || 'Any',
-              flight_time_preference: data.memory_entities.travel_time_preference || 'Anytime'
-            },
+            duration: durationDays || 5,
+            start_date: data.memory_entities.travel_dates?.split(/ to /i)[0]?.trim() || null,
+            end_date: data.memory_entities.travel_dates?.split(/ to /i)[1]?.trim() || null,
+            budget_per_day: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100'),
+            budget_total: parseInt(data.memory_entities.budget?.replace(/[^0-9]/g, '') || '100') * parseInt(data.memory_entities.duration || '5'),
+            interests: data.memory_entities.interests || [],
+            food_preference: data.memory_entities.food_preference || 'Any',
+            companions: data.memory_entities.companions || 'solo',
             flights: {
               outbound: flightText || JSON.stringify(flights)
             },
@@ -796,10 +966,7 @@ export default function ChatInterface({ onBackToHome }) {
               price_per_night: 65, // Default, will be extracted from hotel string
               total_nights: parseInt(data.memory_entities.duration || '5')
             })),
-            itinerary: [{
-              day: 1,
-              activities: [{ name: itineraryText }] // Simplified for now
-            }],
+            itinerary: data.itinerary_text || itineraryText, // Save the full itinerary text
             bookable_activities: activities.map(activity => ({
               name: activity.name || activity,
               description: activity.description || '',
@@ -1104,11 +1271,31 @@ export default function ChatInterface({ onBackToHome }) {
                 key={idx}
                 label={option}
                 onClick={(e) => {
-                  // Track UI selection for budget options
+                  // Track UI selections based on current form context
                   if (budgetOptions.includes(option)) {
                     setUiSelections(prev => ({
                       ...prev,
                       budget: option
+                    }));
+                  } else if (showDietaryPreference) {
+                    // Track dietary preferences (multi-select)
+                    setUiSelections(prev => ({
+                      ...prev,
+                      dietary_preference: prev.dietary_preference 
+                        ? [...prev.dietary_preference, option]
+                        : [option]
+                    }));
+                  } else if (showCuisinePreference) {
+                    // Track cuisine preference
+                    setUiSelections(prev => ({
+                      ...prev,
+                      cuisine_preference: option
+                    }));
+                  } else if (showTravelCompanion) {
+                    // Track travel companion
+                    setUiSelections(prev => ({
+                      ...prev,
+                      travel_companion: option
                     }));
                   }
                   handleSubmit(e, option);

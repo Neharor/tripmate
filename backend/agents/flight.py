@@ -1,8 +1,5 @@
 """
-Flight Agent - Search and recommend flights using:
-1. Amadeus API (real-time prices)
-2. ML Price Prediction (best booking time)
-3. Kaggle historical data (price trends)
+Flight Agent - Search and recommend flights using Amadeus API (real-time prices)
 """
 
 from .base_agent import BaseAgent
@@ -15,14 +12,6 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.flight_service import FlightService
 from services.route_intelligence import RouteIntelligence
-
-# Import ML predictor
-try:
-    from ml.flight_price_predictor import get_predictor
-    ML_ENABLED = True
-except ImportError:
-    ML_ENABLED = False
-    print("⚠️ ML predictor not available. Install pandas, numpy, scikit-learn")
 
 
 class FlightAgent(BaseAgent):
@@ -100,16 +89,6 @@ MISSION: Provide 3 realistic flight options: Cheapest, Fastest, and Best Overall
         super().__init__("FlightAgent", system_prompt)
         self.flight_service = FlightService()
         self.route_intelligence = RouteIntelligence()
-        
-        # Initialize ML predictor (disabled for now due to NumPy compatibility issues)
-        self.predictor = None
-        if ML_ENABLED:
-            try:
-                self.predictor = get_predictor()
-                print("✓ ML price predictor initialized")
-            except Exception as e:
-                print(f"⚠️ ML predictor initialization failed: {e}")
-                self.predictor = None
     
     def handle_request(self, input_data):
         """

@@ -160,20 +160,34 @@ Thought: {agent_scratchpad}""")
                 print("♻️ Trip already generated - returning cached data (STOPPING to prevent more questions)")
                 trip_data = memory.generated_trip_data
                 
+                # Show completion message with option to plan new trip
+                completion_message = (
+                    "🎉 **Your trip is all set!** 🌟\n\n"
+                    "Your personalized itinerary is ready above with:\n"
+                    "✅ Flight options with live pricing\n"
+                    "✅ Hotel recommendations\n"
+                    "✅ Day-by-day activities with real restaurant & attraction suggestions\n\n"
+                    "💾 **Save your trip** to access it anytime!\n\n"
+                    "Ready to plan another adventure? Click below to start fresh! 🚀"
+                )
+                
                 # Return a conversational response with cached trip data AND add memory entities
                 # This ensures frontend knows we're DONE collecting info
                 return {
                     "needs_clarification": False,
-                    "message": trip_data.get("itinerary_text", "Your trip itinerary is ready!"),
-                    "agent_type": "visual_cards_with_data",
+                    "message": completion_message,
+                    "agent_type": "trip_complete",  # Special type to show "Plan New Trip" button
                     "flights": trip_data.get("flights", []),
                     "stays": trip_data.get("hotels", []),
                     "itinerary_text": trip_data.get("itinerary_text"),
                     "cached": True,
-                    "memory_entities": memory.entities if memory else {}
+                    "memory_entities": memory.entities if memory else {},
+                    "trip_complete": True,  # Signal that trip is complete - NO MORE QUESTIONS!
+                    "show_new_trip_button": True  # Show "Plan New Trip" button
                 }
             
             # Check if we have enough information to plan a trip
+            # ONLY check if trip is NOT already generated
             missing_info = []
             if memory:
                 print(f"🔍 CALLING _check_missing_information with entities: {memory.entities}")
@@ -313,11 +327,12 @@ Thought: {agent_scratchpad}""")
             missing.append("dietary_preference")
             return missing
         
-        # THEN ask for cuisine preference (for authentic local experience)
+        # THEN ask for cuisine preferences (for authentic local experience)
         if not entities.get("cuisine_preference"):
             missing.append("cuisine_preference")
             return missing
         
+        # ALL INFO COLLECTED - ready to generate!
         return missing
     
     def _extract_days_from_duration(self, duration_str):
@@ -610,6 +625,7 @@ Thought: {agent_scratchpad}""")
         destination = entities.get("destination", "Unknown")
         departure_city = entities.get("departure_city", "Unknown")
         duration = entities.get("duration", "")
+        travel_dates = entities.get("travel_dates", "")
         budget = entities.get("budget", "$100/day")
         interests = entities.get("interests", [])
         
@@ -617,7 +633,10 @@ Thought: {agent_scratchpad}""")
         import re
         from datetime import datetime, timedelta
         
+        # Try duration first, then travel_dates as fallback
         days = self._extract_days_from_duration(duration)
+        if not days and travel_dates:
+            days = self._extract_days_from_duration(travel_dates)
         if not days:
             days = 5  # default
         
@@ -878,7 +897,15 @@ Thought: {agent_scratchpad}""")
         
         parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
         
-        return "".join(parts)
+        # Convert markdown to HTML
+        import re
+        itinerary_text = "".join(parts)
+        # Convert horizontal rules BEFORE converting newlines
+        itinerary_text = re.sub(r'---\n', r'<hr/>\n', itinerary_text)
+        itinerary_text = re.sub(r'### \*\*(.*?)\*\*', r'<h3><strong>\1</strong></h3>', itinerary_text)
+        itinerary_text = re.sub(r'## \*\*(.*?)\*\*', r'<h2><strong>\1</strong></h2>', itinerary_text)
+        itinerary_text = itinerary_text.replace('\n', '<br/>\n')
+        return itinerary_text
     
     def _format_enhanced_itinerary(self, destination, departure_city, days, budget, interests, flight_data, hotel_data, memory=None):
         """Generate ADVANCED ML-powered itinerary showcasing all capabilities"""
@@ -950,6 +977,11 @@ Thought: {agent_scratchpad}""")
         parts.append("## ✈️ **Flight Options & Booking**\n")
         parts.append(f"*Live pricing from Amadeus API*\n\n")
         
+        # Get user's flight time preference
+        flight_time_pref = entities.get("flight_time_preference", "Anytime (No Preference)")
+        if flight_time_pref and flight_time_pref != "Anytime (No Preference)":
+            parts.append(f"🕐 **Your Preference:** {flight_time_pref}\n\n")
+        
         # Process flight data properly
         if flight_data and flight_data != "Flight search unavailable":
             print(f"🔍 Processing flight data: {type(flight_data)}")
@@ -958,8 +990,38 @@ Thought: {agent_scratchpad}""")
             if isinstance(flight_data, dict):
                 if flight_data.get('flights'):
                     # Process real Amadeus API flight data
+                    flights_to_show = flight_data['flights'][:10]  # Get more flights for filtering
+                    
+                    # Sort flights based on user preference
+                    if flight_time_pref and flight_time_pref != "Anytime (No Preference)":
+                        def get_time_score(flight):
+                            """Score flight based on how well it matches user's time preference"""
+                            if not flight.get('is_real'):
+                                return 0
+                            
+                            itinerary = flight['itineraries'][0]
+                            segments = itinerary['segments']
+                            dep_time = segments[0]['departure']['time'].split('T')[1][:5]
+                            dep_hour = int(dep_time.split(':')[0])
+                            
+                            # Match score based on preference
+                            if "Morning" in flight_time_pref and 6 <= dep_hour < 12:
+                                return 100
+                            elif "Afternoon" in flight_time_pref and 12 <= dep_hour < 17:
+                                return 100
+                            elif "Evening" in flight_time_pref and 17 <= dep_hour < 22:
+                                return 100
+                            elif "Red-Eye" in flight_time_pref or "Night" in flight_time_pref:
+                                if dep_hour >= 22 or dep_hour < 6:
+                                    return 100
+                            
+                            # Partial match gets lower score
+                            return 50
+                        
+                        flights_to_show.sort(key=get_time_score, reverse=True)
+                    
                     parts.append("🎯 **Live Flight Options:**\n\n")
-                    for i, flight in enumerate(flight_data['flights'][:3]):
+                    for i, flight in enumerate(flights_to_show[:3]):  # Show top 3 matches
                         if flight.get('is_real'):
                             # Real Amadeus data
                             itinerary = flight['itineraries'][0]
@@ -1231,18 +1293,54 @@ Thought: {agent_scratchpad}""")
             'Spirituality': ['temple visits', 'meditation retreats', 'spiritual talks', 'yoga classes', 'prayer ceremonies']
         }
         
+        # Get restaurant and attraction recommendations from Google Places API
+        from services.google_places_service import GooglePlacesService, format_restaurant_for_itinerary, format_attraction_for_itinerary
+        
+        # Get preferences from memory parameter (not self.memory)
+        cuisine_pref = memory.entities.get('cuisine_preference', None) if memory else None
+        dietary_pref = memory.entities.get('dietary_preference', None) if memory else None
+        
+        print(f"🍽️ Looking for restaurants: cuisine={cuisine_pref}, dietary={dietary_pref}")
+        print(f"🎯 Looking for attractions based on interests: {interests}")
+        
+        # Use Google Places API for real data
+        places_service = GooglePlacesService()
+        restaurants = places_service.search_restaurants(destination, cuisine_pref, dietary_pref, limit=days)
+        
+        # Fetch attractions based on primary interest
+        primary_interest = interests[0] if interests else None
+        attractions = places_service.search_attractions(destination, primary_interest, limit=days * 2)
+        
+        print(f"🍽️ Found {len(restaurants)} restaurants from Google Places API")
+        print(f"🎯 Found {len(attractions)} attractions from Google Places API")
+        
         for day_num in range(1, days + 1):
             day_date = (start_date + timedelta(days=day_num-1)).strftime("%B %d, %Y")
             parts.append(f"### **Day {day_num}** - {day_date}\n\n")
             
+            # Get restaurant for this day
+            restaurant_text = ""
+            if restaurants and day_num <= len(restaurants):
+                restaurant_text = f" at {format_restaurant_for_itinerary(restaurants[day_num-1])}"
+            
             if day_num == 1:
-                parts.append(f"- 🛬 **Morning:** Arrive in {destination}, check into hotel\n")
-                parts.append(f"- 🗺️ **Afternoon:** Orientation walk, explore neighborhood\n")
-                parts.append(f"- 🍽️ **Evening:** Welcome dinner, try local cuisine\n\n")
+                # Day 1: Add nearby attraction for afternoon orientation
+                afternoon_attraction = ""
+                if attractions and len(attractions) > 0:
+                    afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[0])}"
+                
+                parts.append(f"- 🛬 **9:00 AM - 12:00 PM:** Arrive in {destination}, check into hotel\n")
+                parts.append(f"- 🗺️ **1:00 PM - 5:00 PM:** Orientation walk, explore neighborhood{afternoon_attraction}\n")
+                parts.append(f"- 🍽️ **7:00 PM - 9:00 PM:** Welcome dinner{restaurant_text}\n\n")
             elif day_num == days:
-                parts.append(f"- 🛍️ **Morning:** Last-minute shopping and photos\n")
-                parts.append(f"- 📦 **Afternoon:** Check out, prepare for departure\n")
-                parts.append(f"- ✈️ **Evening:** Depart for {departure_city}\n\n")
+                # Last day: Add shopping/souvenir attraction if available
+                morning_attraction = ""
+                if attractions and len(attractions) > (days-2)*2:
+                    morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[-1])}"
+                
+                parts.append(f"- 🛍️ **9:00 AM - 12:00 PM:** Last-minute shopping and photos{morning_attraction}\n")
+                parts.append(f"- 📦 **1:00 PM - 3:00 PM:** Check out, prepare for departure\n")
+                parts.append(f"- ✈️ **6:00 PM onwards:** Depart for {departure_city}\n\n")
             else:
                 # Middle days - customize based on interests
                 morning_acts = []
@@ -1266,9 +1364,27 @@ Thought: {agent_scratchpad}""")
                 if not evening_acts:
                     evening_acts = ['dinner', 'evening walk']
                 
-                parts.append(f"- ☀️ **Morning:** {morning_acts[0].capitalize()}\n")
-                parts.append(f"- 🎯 **Afternoon:** {afternoon_acts[0].capitalize()}\n")
-                parts.append(f"- 🌙 **Evening:** {evening_acts[0].capitalize()}\n\n")
+                # Add real attractions from Google Places
+                morning_attraction = ""
+                afternoon_attraction = ""
+                
+                # Get attractions for this day (2 per day for middle days)
+                attraction_index = (day_num - 2) * 2  # Start from 0 for day 2
+                
+                if attractions:
+                    if attraction_index < len(attractions):
+                        morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_index])}"
+                    if attraction_index + 1 < len(attractions):
+                        afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_index + 1])}"
+                
+                # Add restaurant recommendation for evening if available
+                evening_restaurant = ""
+                if restaurants and day_num <= len(restaurants):
+                    evening_restaurant = f" at {format_restaurant_for_itinerary(restaurants[day_num-1])}"
+                
+                parts.append(f"- ☀️ **9:00 AM - 12:00 PM:** {morning_acts[0].capitalize()}{morning_attraction}\n")
+                parts.append(f"- 🎯 **1:00 PM - 5:00 PM:** {afternoon_acts[0].capitalize()}{afternoon_attraction}\n")
+                parts.append(f"- 🌙 **7:00 PM - 9:00 PM:** {evening_acts[0].capitalize()}{evening_restaurant}\n\n")
         
         # Travel Tips
         parts.append("---\n\n## 💡 Travel Tips\n\n")
@@ -1303,7 +1419,25 @@ Thought: {agent_scratchpad}""")
         
         parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
         
-        return "".join(parts)
+        # Convert markdown to HTML
+        import re
+        itinerary_text = "".join(parts)
+        
+        # Convert horizontal rules FIRST (before replacing newlines)
+        itinerary_text = re.sub(r'---\n', r'<hr/>\n', itinerary_text)
+        
+        # Convert headers SECOND (before replacing newlines)
+        itinerary_text = re.sub(r'### \*\*(.*?)\*\*', r'<h3><strong>\1</strong></h3>', itinerary_text)
+        itinerary_text = re.sub(r'## \*\*(.*?)\*\*', r'<h2><strong>\1</strong></h2>', itinerary_text)
+        itinerary_text = re.sub(r'# \*\*(.*?)\*\*', r'<h1><strong>\1</strong></h1>', itinerary_text)
+        
+        # Convert list items (- or •) to HTML bullets
+        itinerary_text = re.sub(r'\n- ', r'\n• ', itinerary_text)  # Normalize bullets
+        
+        # Finally replace newlines with <br/>
+        itinerary_text = itinerary_text.replace('\n', '<br/>\n')
+        
+        return itinerary_text
     
     def _extract_flight_cards(self, flight_data, departure_city, destination, memory):
         """Extract structured flight data for visual cards"""

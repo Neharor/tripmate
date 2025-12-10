@@ -1,12 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import ItineraryCard from './components/ItineraryCard';
 import './styles/MyTrips.css';
 
 const MyTrips = ({ onBackToHome }) => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [expandedTrip, setExpandedTrip] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState(null);
 
   useEffect(() => {
     fetchTrips();
@@ -56,8 +67,14 @@ const MyTrips = ({ onBackToHome }) => {
     }
   };
 
-  const toggleItinerary = (tripId) => {
-    setExpandedTrip(expandedTrip === tripId ? null : tripId);
+  const openItineraryModal = (trip) => {
+    setSelectedTrip(trip);
+    setModalOpen(true);
+  };
+
+  const closeItineraryModal = () => {
+    setModalOpen(false);
+    setSelectedTrip(null);
   };
 
   const parseItinerary = (itinerary) => {
@@ -255,74 +272,114 @@ const MyTrips = ({ onBackToHome }) => {
 
               <div className="trip-card-footer">
                 <button 
-                  onClick={() => toggleItinerary(trip.id)}
+                  onClick={() => openItineraryModal(trip)}
                   className="view-itinerary-button"
                 >
-                  {expandedTrip === trip.id ? '📋 Hide Itinerary' : '📋 View Itinerary'}
+                  📋 View Itinerary
                 </button>
                 <span className="created-date">
                   Created {new Date(trip.created_at).toLocaleDateString()}
                 </span>
               </div>
 
-              {expandedTrip === trip.id && trip.itinerary && (
-                <div className="itinerary-section">
-                  <h4>📅 Day-by-Day Itinerary</h4>
-                  {(() => {
-                    const parsedItinerary = parseItinerary(trip.itinerary);
-                    
-                    if (parsedItinerary && parsedItinerary.length > 0) {
-                      return (
-                        <div className="itinerary-days">
-                          {parsedItinerary.map((day, idx) => (
-                            <div key={idx} className="itinerary-day">
-                              <div className="day-header">
-                                <span className="day-number">{day.title || `Day ${day.day || idx + 1}`}</span>
-                                {day.date && <span className="day-date">{day.date}</span>}
-                              </div>
-                              <div className="day-content">
-                                {day.activities && day.activities.length > 0 && (
-                                  <ul className="activities-list">
-                                    {day.activities.map((activity, actIdx) => (
-                                      <li key={actIdx}>
-                                        {typeof activity === 'string' ? activity : activity.description || activity.name}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    } else if (typeof trip.itinerary === 'string') {
-                      return (
-                        <div className="itinerary-text">
-                          <div className="itinerary-formatted">
-                            {trip.itinerary.split('\n').map((line, idx) => {
-                              line = line.trim();
-                              if (line.startsWith('**Day')) {
-                                return <h5 key={idx} className="day-title">{line.replace(/\*\*/g, '')}</h5>;
-                              } else if (line.startsWith('**')) {
-                                return <h6 key={idx} className="section-title">{line.replace(/\*\*/g, '')}</h6>;
-                              } else if (line.length > 0) {
-                                return <p key={idx} className="activity-line">{line}</p>;
-                              }
-                              return null;
-                            })}
-                          </div>
-                        </div>
-                      );
-                    } else {
-                      return <p className="no-itinerary">No detailed itinerary available</p>;
-                    }
-                  })()}
-                </div>
-              )}
+
             </div>
           ))}
         </div>
       )}
+
+      {/* Itinerary Preview Modal */}
+      <Dialog
+        open={modalOpen}
+        onClose={closeItineraryModal}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            maxHeight: '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          bgcolor: '#f8fafc',
+          borderBottom: '1px solid #e2e8f0'
+        }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+              📅 Trip Itinerary
+            </Typography>
+            {selectedTrip && (
+              <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
+                {selectedTrip.departure_city && selectedTrip.destination ? (
+                  <>{selectedTrip.departure_city} → {selectedTrip.destination}</>
+                ) : (
+                  selectedTrip.destination
+                )}
+              </Typography>
+            )}
+          </Box>
+          <IconButton onClick={closeItineraryModal}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent sx={{ p: 3 }}>
+          {selectedTrip && selectedTrip.itinerary && (
+            <Box>
+              {(() => {
+                const parsedItinerary = parseItinerary(selectedTrip.itinerary);
+                
+                if (parsedItinerary && parsedItinerary.length > 0) {
+                  return (
+                    <Box sx={{ mt: 2 }}>
+                      {parsedItinerary.map((day, idx) => (
+                        <ItineraryCard 
+                          key={idx}
+                          dayData={day}
+                          dayNumber={day.day || idx + 1}
+                        />
+                      ))}
+                    </Box>
+                  );
+                } else {
+                  return (
+                    <Box sx={{ 
+                      textAlign: 'center', 
+                      py: 4,
+                      color: '#64748b'
+                    }}>
+                      <Typography variant="h6">📝 No detailed itinerary available</Typography>
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        This trip doesn't have a structured daily itinerary.
+                      </Typography>
+                    </Box>
+                  );
+                }
+              })()
+              }
+            </Box>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={closeItineraryModal}
+            variant="contained"
+            sx={{
+              bgcolor: '#667eea',
+              '&:hover': { bgcolor: '#5a6fd8' },
+              borderRadius: '8px',
+              px: 3
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

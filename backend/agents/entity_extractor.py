@@ -72,8 +72,8 @@ Your job: Identify and extract travel-related entities in JSON format."""
                     known_fields.append(f"✅ Cuisine preference: {current_memory['cuisine_preference']}")
                 if current_memory.get("travel_dates"):
                     known_fields.append(f"✅ Travel dates: {current_memory['travel_dates']}")
-                if current_memory.get("travel_time_preference"):
-                    known_fields.append(f"✅ Flight time: {current_memory['travel_time_preference']}")
+                if current_memory.get("flight_time_preference"):
+                    known_fields.append(f"✅ Flight time: {current_memory['flight_time_preference']}")
                 
                 if known_fields:
                     memory_context = f"\n\n**ALREADY KNOWN (don't overwrite these):**\n" + "\n".join(known_fields)
@@ -93,7 +93,7 @@ Return ONLY valid JSON with these fields:
     "food_preference": "'vegetarian', 'non-vegetarian', 'vegan', 'any' or null",
     "cuisine_preference": "'Indian', 'Chinese', 'Japanese', 'Thai', 'Italian', 'Local cuisine', 'Any' or null",
     "travel_dates": "MUST include year! e.g., 'Dec 15, 2025 to Dec 20, 2025', '2025-12-25 to 2025-12-30', or null",
-    "travel_time_preference": "'morning', 'afternoon', 'evening', 'anytime' or null",
+    "flight_time_preference": "'morning', 'afternoon', 'evening', 'anytime' or null",
     "companions": "'solo', 'couple', 'family', 'friends' or null"
 }}
 
@@ -115,7 +115,7 @@ CRITICAL Rules for CONTEXT AWARENESS:
    - If assistant asked "Where do you want to go?" → Next city = destination
    - If assistant asked "Where are you flying from?" → Next city = departure_city (NOT destination)
    - If assistant asked "When do you want to travel?" → Next answer = travel_dates (MUST include year: "Dec 15, 2025 to Dec 20, 2025")
-   - If assistant asked "What time do you prefer to fly?" → Next answer = travel_time_preference
+   - If assistant asked "What time do you prefer to fly?" → Next answer = flight_time_preference
    - If assistant asked "Food preference?" → Next answer = food_preference (Vegetarian/Non-vegetarian/Vegan/Any)
    - If assistant asked "Preferred cuisine?" → Next answer = cuisine_preference (Indian/Chinese/Japanese/Thai/etc.)
 
@@ -173,7 +173,7 @@ RESPOND WITH ONLY THE JSON OBJECT."""
             "food_preference": None,
             "cuisine_preference": None,
             "travel_dates": None,
-            "travel_time_preference": None,
+            "flight_time_preference": None,
             "companions": None,
             "dietary_preference": [],  # Array for orchestrator compatibility
             "_fast_path_success": False  # Flag to indicate if we found a clear match
@@ -195,27 +195,36 @@ RESPOND WITH ONLY THE JSON OBJECT."""
             entities["_fast_path_success"] = True
             return entities
         
-        # Pattern 3: Simple city/country names (look for capitalized words without special chars)
-        # Only if memory indicates we're asking for destination or departure_city
-        if current_memory:
-            if not current_memory.get("destination") and re.match(r'^[A-Z][a-z]+(?:,?\s+[A-Z][a-z]+)*$', text.strip()):
-                # Likely a destination (capitalized city/country)
+        # Pattern 3: Simple city/country names (look for capitalized words)
+        # PRIORITY: Check this BEFORE interests pattern
+        # More flexible pattern to handle "Dubai, UAE", "Tokyo, Japan", "New York", etc.
+        city_pattern = r'^[A-Z][a-zA-Z\s\-]+(?:,\s*[A-Z][a-zA-Z\s\-]+)?$'
+        
+        # Check if text matches city pattern (even without current_memory)
+        if re.match(city_pattern, text.strip()):
+            # If no destination yet, assume this is destination
+            if not current_memory or not current_memory.get("destination"):
                 entities["destination"] = text.strip()
                 entities["_fast_path_success"] = True
                 return entities
-            elif current_memory.get("destination") and not current_memory.get("departure_city") and re.match(r'^[A-Z][a-z]+(?:,?\s+[A-Z][a-z]+)*$', text.strip()):
-                # Likely departure city
+            # If we have destination but no departure city, this is departure
+            elif current_memory.get("destination") and not current_memory.get("departure_city"):
                 entities["departure_city"] = text.strip()
                 entities["_fast_path_success"] = True
                 return entities
         
-        # Pattern 4: Interests list (comma-separated, e.g., "Food, Shopping, Nightlife")
+        # Pattern 4: Interests list (comma-separated, e.g., "Food, Shopping, Nightlife")  
+        # Only match if it has MULTIPLE items (at least 2 commas or clear interest words)
         if ',' in text and current_memory and not current_memory.get("interests"):
-            interest_candidates = [i.strip().title() for i in text.split(',')]
-            if all(len(i) < 20 and i.isalpha() or ' ' in i for i in interest_candidates):
-                entities["interests"] = interest_candidates
-                entities["_fast_path_success"] = True
-                return entities
+            # Skip if it looks like a city (e.g., "Dubai, UAE" has only 1 comma)
+            if text.count(',') == 1 and re.match(city_pattern, text.strip()):
+                pass  # This is a city, not interests
+            else:
+                interest_candidates = [i.strip().title() for i in text.split(',')]
+                if all(len(i) < 20 and i.isalpha() or ' ' in i for i in interest_candidates):
+                    entities["interests"] = interest_candidates
+                    entities["_fast_path_success"] = True
+                    return entities
         
         # Pattern 5: Food/Dietary preferences
         # Note: We set BOTH food_preference (single) and dietary_preference (array) for compatibility
@@ -234,6 +243,23 @@ RESPOND WITH ONLY THE JSON OBJECT."""
         for key, val in companions.items():
             if key in text_lower and len(text_lower) < 30:
                 entities["companions"] = val
+                entities["_fast_path_success"] = True
+                return entities
+        
+        # Pattern 7: Flight time preferences
+        flight_time_map = {
+            'morning': 'Morning (6 AM - 12 PM)',
+            'afternoon': 'Afternoon (12 PM - 5 PM)',
+            'evening': 'Evening (5 PM - 10 PM)',
+            'night': 'Red-Eye/Night (10 PM - 6 AM)',
+            'red-eye': 'Red-Eye/Night (10 PM - 6 AM)',
+            'anytime': 'Anytime (No Preference)',
+            'no preference': 'Anytime (No Preference)',
+            'any time': 'Anytime (No Preference)'
+        }
+        for key, val in flight_time_map.items():
+            if key in text_lower and len(text_lower) < 50:
+                entities["flight_time_preference"] = val
                 entities["_fast_path_success"] = True
                 return entities
         

@@ -43,8 +43,13 @@ class Trip:
         Returns:
             dict: Created trip document
         """
+        print(f"\n🔍 TRIP MODEL: create_trip called")
+        print(f"🔍 TRIP MODEL: user_id type: {type(user_id)}, value: {user_id}")
+        print(f"🔍 TRIP MODEL: trip_data type: {type(trip_data)}")
+        
         if isinstance(user_id, str):
             user_id = ObjectId(user_id)
+            print(f"🔍 TRIP MODEL: Converted user_id to ObjectId: {user_id}")
         
         # Create trip document
         trip_doc = {
@@ -84,14 +89,30 @@ class Trip:
             },
             
             # ML features for recommendations
-            "ml_features": self._extract_ml_features(trip_data)
+            "ml_features": self._extract_ml_features_with_logging(trip_data)
         }
+        
+        print(f"🔍 TRIP MODEL: About to insert trip document into MongoDB")
+        print(f"🔍 TRIP MODEL: trip_doc keys: {list(trip_doc.keys())}")
         
         # Insert into database
         result = self.collection.insert_one(trip_doc)
         trip_doc['_id'] = result.inserted_id
         
+        print(f"🔍 TRIP MODEL: Trip inserted successfully with _id: {result.inserted_id}")
         return trip_doc
+    
+    def _extract_ml_features_with_logging(self, trip_data):
+        """Wrapper for _extract_ml_features with logging"""
+        print(f"🔍 TRIP MODEL: _extract_ml_features_with_logging called")
+        try:
+            features = self._extract_ml_features(trip_data)
+            print(f"🔍 TRIP MODEL: ML features extracted successfully: {features}")
+            return features
+        except Exception as e:
+            print(f"❌ TRIP MODEL: Error in _extract_ml_features: {str(e)}")
+            print(f"❌ TRIP MODEL: trip_data causing error: {trip_data}")
+            raise
     
     def _extract_ml_features(self, trip_data):
         """
@@ -103,27 +124,83 @@ class Trip:
         Returns:
             dict: ML features
         """
+        print(f"🔍 ML FEATURES: Starting extraction")
+        print(f"🔍 ML FEATURES: trip_data type: {type(trip_data)}")
+        
         # Analyze interests distribution
-        interests = trip_data.get('preferences', {}).get('interests', [])
+        preferences = trip_data.get('preferences', {})
+        print(f"🔍 ML FEATURES: preferences type: {type(preferences)}, value: {preferences}")
+        
+        if isinstance(preferences, dict):
+            interests = preferences.get('interests', [])
+        else:
+            print(f"❌ ML FEATURES: preferences is not a dict, it's {type(preferences)}")
+            interests = []
+        
+        print(f"🔍 ML FEATURES: interests: {interests}")
         
         # Calculate activity type distribution
         itinerary = trip_data.get('itinerary', [])
+        print(f"🔍 ML FEATURES: itinerary type: {type(itinerary)}, value: {itinerary}")
+        
         activity_counts = {}
-        for day in itinerary:
-            for activity in day.get('activities', []):
-                activity_type = activity.get('type', 'other')
-                activity_counts[activity_type] = activity_counts.get(activity_type, 0) + 1
+        if isinstance(itinerary, list):
+            for i, day in enumerate(itinerary):
+                print(f"🔍 ML FEATURES: Processing day {i}, type: {type(day)}, value: {day}")
+                if isinstance(day, dict):
+                    activities = day.get('activities', [])
+                    print(f"🔍 ML FEATURES: Day {i} activities type: {type(activities)}, value: {activities}")
+                    
+                    if isinstance(activities, list):
+                        for j, activity in enumerate(activities):
+                            print(f"🔍 ML FEATURES: Activity {j} type: {type(activity)}, value: {activity}")
+                            # Handle both string activities and dict activities with type
+                            if isinstance(activity, dict):
+                                activity_type = activity.get('type', 'other')
+                            else:
+                                # If activity is a string, classify it based on keywords
+                                activity_type = self._classify_activity_type(str(activity))
+                            activity_counts[activity_type] = activity_counts.get(activity_type, 0) + 1
+                    else:
+                        print(f"❌ ML FEATURES: activities is not a list, it's {type(activities)}")
+                else:
+                    print(f"❌ ML FEATURES: day is not a dict, it's {type(day)}")
+        else:
+            print(f"❌ ML FEATURES: itinerary is not a list, it's {type(itinerary)}")
         
         total_activities = sum(activity_counts.values())
+        print(f"🔍 ML FEATURES: activity_counts: {activity_counts}")
+        print(f"🔍 ML FEATURES: total_activities: {total_activities}")
         
-        return {
-            "destination_type": self._classify_destination_type(trip_data.get('destination', '')),
+        # Process budget safely
+        budget = trip_data.get('budget', {})
+        print(f"🔍 ML FEATURES: budget type: {type(budget)}, value: {budget}")
+        
+        if isinstance(budget, dict):
+            per_day_budget = budget.get('per_day', 0)
+        else:
+            print(f"❌ ML FEATURES: budget is not a dict, it's {type(budget)}")
+            per_day_budget = 0
+        
+        print(f"🔍 ML FEATURES: per_day_budget: {per_day_budget}")
+        
+        destination = trip_data.get('destination', '')
+        duration_days = trip_data.get('duration_days', 1)
+        
+        print(f"🔍 ML FEATURES: destination: {destination}")
+        print(f"🔍 ML FEATURES: duration_days: {duration_days}")
+        
+        features = {
+            "destination_type": self._classify_destination_type(destination),
             "activity_diversity": len(activity_counts) / max(total_activities, 1),
-            "budget_category": self._classify_budget(trip_data.get('budget', {}).get('per_day', 0)),
-            "pace": self._classify_pace(total_activities, trip_data.get('duration_days', 1)),
+            "budget_category": self._classify_budget(per_day_budget),
+            "pace": self._classify_pace(total_activities, duration_days),
             "food_focus": activity_counts.get('food', 0) / max(total_activities, 1),
             "adventure_focus": activity_counts.get('activity', 0) / max(total_activities, 1)
         }
+        
+        print(f"🔍 ML FEATURES: Final features: {features}")
+        return features
     
     def _classify_destination_type(self, destination):
         """Classify destination type (Beach, City, Mountain, etc.)"""
@@ -137,6 +214,25 @@ class Trip:
             return "Mountain + Adventure"
         else:
             return "Mixed"
+    
+    def _classify_activity_type(self, activity_str):
+        """Classify activity type based on text content"""
+        activity_lower = activity_str.lower()
+        
+        if any(word in activity_lower for word in ['eat', 'restaurant', 'food', 'dining', 'cook', 'market']):
+            return "food"
+        elif any(word in activity_lower for word in ['museum', 'temple', 'culture', 'historic', 'art', 'gallery']):
+            return "culture"
+        elif any(word in activity_lower for word in ['hike', 'climb', 'adventure', 'sport', 'activity', 'trek']):
+            return "activity"
+        elif any(word in activity_lower for word in ['shop', 'shopping', 'market', 'store', 'buy']):
+            return "shopping"
+        elif any(word in activity_lower for word in ['relax', 'spa', 'beach', 'rest', 'chill']):
+            return "relaxation"
+        elif any(word in activity_lower for word in ['night', 'bar', 'club', 'party', 'drink']):
+            return "nightlife"
+        else:
+            return "other"
     
     def _classify_budget(self, per_day_budget):
         """Classify budget category"""

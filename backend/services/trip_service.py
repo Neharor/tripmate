@@ -13,21 +13,61 @@ def create_trip(user_id, trip_data):
     session = get_session()
     
     try:
+        # DEBUG: Log incoming data
+        import json
+        print("\n" + "="*80)
+        print("DEBUG: CREATE_TRIP CALLED")
+        print("="*80)
+        print(f"user_id: {user_id}, type: {type(user_id)}")
+        print(f"trip_data type: {type(trip_data)}")
+        
+        # Check if trip_data is actually a dict
+        if not isinstance(trip_data, dict):
+            print(f"ERROR: trip_data is not a dict! It's: {trip_data}")
+            return {'error': f'Invalid trip_data type: {type(trip_data)}'}, 400
+        
+        print(f"trip_data keys: {list(trip_data.keys())}")
+        print(f"trip_data:\n{json.dumps(trip_data, indent=2, default=str)}")
+        print("="*80 + "\n")
+        
+        # Extract and clean duration (convert "7 days" or date range to integer)
+        duration = trip_data.get('duration')
+        if duration:
+            import re
+            # Extract number from "7 days" or "7"
+            if isinstance(duration, str):
+                match = re.search(r'(\d+)', duration)
+                duration = int(match.group(1)) if match else None
+            elif isinstance(duration, (int, float)):
+                duration = int(duration)
+        
+        # If duration is still None, calculate from dates
+        if not duration and trip_data.get('start_date') and trip_data.get('end_date'):
+            from datetime import datetime
+            start = datetime.fromisoformat(trip_data['start_date']) if isinstance(trip_data['start_date'], str) else trip_data['start_date']
+            end = datetime.fromisoformat(trip_data['end_date']) if isinstance(trip_data['end_date'], str) else trip_data['end_date']
+            duration = (end - start).days + 1
+        
         # Extract trip details
+        # Store itinerary text in metadata if provided
+        metadata = trip_data.get('metadata', {})
+        if 'itinerary' in trip_data:
+            metadata['itinerary_text'] = trip_data.get('itinerary')
+        
         trip = Trip(
             user_id=user_id,
             destination=trip_data.get('destination'),
             departure_city=trip_data.get('departure_city'),
             start_date=trip_data.get('start_date'),
             end_date=trip_data.get('end_date'),
-            duration=trip_data.get('duration'),
+            duration=duration,
             budget_total=trip_data.get('budget_total'),
             budget_per_day=trip_data.get('budget_per_day'),
             status='planned',
             interests=trip_data.get('interests', []),
             food_preference=trip_data.get('food_preference'),
             companions=trip_data.get('companions'),
-            metadata=trip_data.get('metadata', {})
+            metadata=metadata
         )
         
         session.add(trip)
@@ -60,8 +100,16 @@ def get_user_trips(user_id, status=None):
         
         trips = query.order_by(desc(Trip.created_at)).all()
         
+        # Add itinerary text from metadata for each trip
+        trips_list = []
+        for trip in trips:
+            trip_dict = trip.to_dict()
+            if trip.metadata and 'itinerary_text' in trip.metadata:
+                trip_dict['itinerary'] = trip.metadata['itinerary_text']
+            trips_list.append(trip_dict)
+        
         return {
-            'trips': [trip.to_dict() for trip in trips]
+            'trips': trips_list
         }, 200
         
     except Exception as e:
@@ -85,8 +133,11 @@ def get_trip_details(user_id, trip_id):
         # Include bookings
         trip_data['bookings'] = [b.to_dict() for b in trip.bookings]
         
-        # Include itinerary
-        trip_data['itinerary'] = [i.to_dict() for i in trip.itineraries]
+        # Include itinerary (from metadata or from itineraries table)
+        if trip.metadata and 'itinerary_text' in trip.metadata:
+            trip_data['itinerary'] = trip.metadata['itinerary_text']
+        else:
+            trip_data['itinerary'] = [i.to_dict() for i in trip.itineraries]
         
         return trip_data, 200
         
