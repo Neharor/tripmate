@@ -352,7 +352,7 @@ const MyTrips = ({ onBackToHome }) => {
                       py: 4,
                       color: '#64748b'
                     }}>
-                      <Typography variant="h6">📝 No detailed itinerary available</Typography>
+                        <Typography variant="h6">📝 No detailed itinerary available</Typography>
                       <Typography variant="body2" sx={{ mt: 1 }}>
                         This trip doesn't have a structured daily itinerary.
                       </Typography>

@@ -83,24 +83,19 @@ export default function ChatInterface({ onBackToHome }) {
     return days;
   };
   
-  // Comprehensive destination options - popular countries and cities worldwide
+  // Popular destination options for autocomplete
   const destinationOptions = [
-    // Asia
     'Bali, Indonesia', 'Tokyo, Japan', 'Bangkok, Thailand', 'Singapore', 'Dubai, UAE', 
     'Maldives', 'Seoul, South Korea', 'Hong Kong', 'Phuket, Thailand', 'Mumbai, India',
-    'Delhi, India', 'Bali, Indonesia', 'Kuala Lumpur, Malaysia', 'Hanoi, Vietnam',
-    // Europe
+    'Delhi, India', 'Kuala Lumpur, Malaysia', 'Hanoi, Vietnam',
     'Paris, France', 'London, UK', 'Rome, Italy', 'Barcelona, Spain', 'Amsterdam, Netherlands',
     'Berlin, Germany', 'Prague, Czech Republic', 'Vienna, Austria', 'Athens, Greece', 
     'Lisbon, Portugal', 'Iceland', 'Switzerland', 'Santorini, Greece', 'Venice, Italy',
-    // Americas
     'New York, USA', 'Los Angeles, USA', 'Miami, USA', 'Las Vegas, USA', 'San Francisco, USA',
     'Cancun, Mexico', 'Rio de Janeiro, Brazil', 'Buenos Aires, Argentina', 'Toronto, Canada',
     'Vancouver, Canada', 'Costa Rica', 'Peru', 'Colombia',
-    // Middle East & Africa
     'Cairo, Egypt', 'Cape Town, South Africa', 'Marrakech, Morocco', 'Tel Aviv, Israel',
     'Istanbul, Turkey', 'Jordan', 'Kenya', 'Tanzania',
-    // Oceania
     'Sydney, Australia', 'Melbourne, Australia', 'Auckland, New Zealand', 'Fiji', 'Bora Bora'
   ];
   
@@ -382,7 +377,7 @@ export default function ChatInterface({ onBackToHome }) {
               <SaveTripButton 
                 tripData={currentTripData}
                 onSaved={(savedTrip) => {
-                  console.log('Trip saved:', savedTrip);
+
                 }}
               />
               
@@ -517,8 +512,7 @@ export default function ChatInterface({ onBackToHome }) {
 
   const formatMessage = (rawMessage) => {
     try {
-      console.log('Raw message received:', rawMessage);
-      console.log('Type of message:', typeof rawMessage);
+
       
       if (typeof rawMessage === 'string') return rawMessage;
       
@@ -1029,7 +1023,7 @@ export default function ChatInterface({ onBackToHome }) {
     setLoading(true);
     try {
       const result = await fetchItinerary(queryToSend, uiSelections);  // Send "ok" with ui_selections
-      console.log('API result:', result);
+
       
       // Clear UI selections after sending (they've been used for this query)
       setUiSelections({});

@@ -13,12 +13,10 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import FlightIcon from '@mui/icons-material/Flight';
 
 export default function ItineraryCard({ dayData, dayNumber }) {
-  // Debug logging
-  console.log(`🎯 ItineraryCard Day ${dayNumber}:`, dayData);
+
   
   // Ensure dayData has required structure
   if (!dayData || !dayData.activities) {
-    console.log(`⚠️ Missing data for Day ${dayNumber}:`, dayData);
     return (
       <Card sx={{ mb: 3, p: 2, borderRadius: '16px' }}>
         <Typography variant="body1" color="text.secondary">
