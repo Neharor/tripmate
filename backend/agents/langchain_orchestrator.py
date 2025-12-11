@@ -897,14 +897,8 @@ Thought: {agent_scratchpad}""")
         
         parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
         
-        # Convert markdown to HTML
-        import re
+        # Return plain text (no HTML conversion)
         itinerary_text = "".join(parts)
-        # Convert horizontal rules BEFORE converting newlines
-        itinerary_text = re.sub(r'---\n', r'<hr/>\n', itinerary_text)
-        itinerary_text = re.sub(r'### \*\*(.*?)\*\*', r'<h3><strong>\1</strong></h3>', itinerary_text)
-        itinerary_text = re.sub(r'## \*\*(.*?)\*\*', r'<h2><strong>\1</strong></h2>', itinerary_text)
-        itinerary_text = itinerary_text.replace('\n', '<br/>\n')
         return itinerary_text
     
     def _format_enhanced_itinerary(self, destination, departure_city, days, budget, interests, flight_data, hotel_data, memory=None):
@@ -934,7 +928,7 @@ Thought: {agent_scratchpad}""")
                 
                 # Handle formats: "Dec 8, 2025 to Dec 10, 2025" or "2025-12-08 to 2025-12-10"
                 if " to " in travel_dates_str:
-                    start_date_str = travel_dates_str.split(" to ")[0].strip()
+                    start_date_str = (travel_dates_str or 'Dec 9, 2025').split(" to ")[0].strip()
                     
                     # Try parsing different date formats
                     for fmt in ["%b %d, %Y", "%B %d, %Y", "%Y-%m-%d", "%m/%d/%Y"]:
@@ -1324,14 +1318,19 @@ Thought: {agent_scratchpad}""")
                 restaurant_text = f" at {format_restaurant_for_itinerary(restaurants[day_num-1])}"
             
             if day_num == 1:
-                # Day 1: Add nearby attraction for afternoon orientation
+                # Day 1: Comprehensive arrival day with multiple activities
                 afternoon_attraction = ""
+                late_afternoon_attraction = ""
                 if attractions and len(attractions) > 0:
                     afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[0])}"
+                if attractions and len(attractions) > 1:
+                    late_afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[1])}"
                 
                 parts.append(f"- 🛬 **9:00 AM - 12:00 PM:** Arrive in {destination}, check into hotel\n")
-                parts.append(f"- 🗺️ **1:00 PM - 5:00 PM:** Orientation walk, explore neighborhood{afternoon_attraction}\n")
-                parts.append(f"- 🍽️ **7:00 PM - 9:00 PM:** Welcome dinner{restaurant_text}\n\n")
+                parts.append(f"- 🗺️ **1:00 PM - 3:30 PM:** Orientation walk, explore neighborhood{afternoon_attraction}\n")
+                parts.append(f"- ☀️ **4:00 PM - 6:00 PM:** Local area exploration{late_afternoon_attraction}\n")
+                parts.append(f"- 🍽️ **7:00 PM - 9:00 PM:** Welcome dinner{restaurant_text}\n")
+                parts.append(f"- 🌙 **9:30 PM - 10:30 PM:** Evening stroll, get acquainted with local atmosphere\n\n")
             elif day_num == days:
                 # Last day: Add shopping/souvenir attraction if available
                 morning_attraction = ""
@@ -1342,49 +1341,85 @@ Thought: {agent_scratchpad}""")
                 parts.append(f"- 📦 **1:00 PM - 3:00 PM:** Check out, prepare for departure\n")
                 parts.append(f"- ✈️ **6:00 PM onwards:** Depart for {departure_city}\n\n")
             else:
-                # Middle days - customize based on interests
-                morning_acts = []
+                # Middle days - create comprehensive itinerary with 4-5 time slots
+                
+                # Enhanced activities for different time periods
+                base_activities = {
+                    'early_morning': ['sunrise viewing', 'morning exercise', 'early market visit', 'temple visit', 'photography walk'],
+                    'mid_morning': ['explore local neighborhoods', 'visit cultural sites', 'sightseeing tour', 'museum visit', 'guided tour'],
+                    'afternoon': ['try local cuisine', 'shopping exploration', 'cultural experiences', 'outdoor activities', 'leisure time'],
+                    'late_afternoon': ['scenic viewpoints', 'local workshops', 'art galleries', 'coffee culture', 'relaxation'],
+                    'evening': ['local dining experience', 'sunset viewing', 'entertainment', 'night markets', 'evening stroll']
+                }
+                
+                # Select activities mixing user interests with travel essentials
+                early_morning_acts = []
+                mid_morning_acts = []
                 afternoon_acts = []
+                late_afternoon_acts = []
                 evening_acts = []
                 
+                # Add user interest-based activities (rotate to avoid repetition)
                 for interest in interests:
                     if interest in interest_activities:
                         acts = interest_activities[interest]
-                        if len(morning_acts) < 2:
-                            morning_acts.append(acts[(day_num - 1) % len(acts)])
-                        if len(afternoon_acts) < 2:
+                        if len(early_morning_acts) < 1:
+                            early_morning_acts.append(acts[(day_num - 2) % len(acts)])
+                        if len(mid_morning_acts) < 1:
+                            mid_morning_acts.append(acts[(day_num - 1) % len(acts)])
+                        if len(afternoon_acts) < 1:
                             afternoon_acts.append(acts[(day_num) % len(acts)])
-                        if len(evening_acts) < 2:
-                            evening_acts.append(acts[(day_num + 1) % len(acts)])
+                        if len(late_afternoon_acts) < 1:
+                            late_afternoon_acts.append(acts[(day_num + 1) % len(acts)])
                 
-                if not morning_acts:
-                    morning_acts = [f'explore {destination}', 'sightseeing']
-                if not afternoon_acts:
-                    afternoon_acts = ['local cuisine tasting', 'cultural sites']
-                if not evening_acts:
-                    evening_acts = ['dinner', 'evening walk']
+                # Fill with balanced base activities if needed
+                if len(early_morning_acts) < 1:
+                    early_morning_acts.append(base_activities['early_morning'][(day_num - 2) % len(base_activities['early_morning'])])
+                if len(mid_morning_acts) < 1:
+                    mid_morning_acts.append(base_activities['mid_morning'][(day_num - 2) % len(base_activities['mid_morning'])])
+                if len(afternoon_acts) < 1:
+                    afternoon_acts.append(base_activities['afternoon'][(day_num - 2) % len(base_activities['afternoon'])])
+                if len(late_afternoon_acts) < 1:
+                    late_afternoon_acts.append(base_activities['late_afternoon'][(day_num - 2) % len(base_activities['late_afternoon'])])
                 
-                # Add real attractions from Google Places
-                morning_attraction = ""
+                # Evening is always dining-focused (using user's dietary/cuisine preferences)
+                if dietary_prefs or cuisine_prefs:
+                    cuisine_text = f"{', '.join(cuisine_prefs) if cuisine_prefs else 'local'}"
+                    dietary_text = f" ({', '.join(dietary_prefs)})" if dietary_prefs else ""
+                    evening_acts = [f"{cuisine_text} dinner{dietary_text}"]
+                else:
+                    evening_acts = ['local dining experience']
+                
+                # Add real attractions from Google Places (4 per day for comprehensive coverage)
+                early_morning_attraction = ""
+                mid_morning_attraction = ""
                 afternoon_attraction = ""
+                late_afternoon_attraction = ""
                 
-                # Get attractions for this day (2 per day for middle days)
-                attraction_index = (day_num - 2) * 2  # Start from 0 for day 2
+                # Get attractions for this day (4 per day for middle days)
+                attraction_base_index = (day_num - 2) * 4  # Start from 0 for day 2
                 
                 if attractions:
-                    if attraction_index < len(attractions):
-                        morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_index])}"
-                    if attraction_index + 1 < len(attractions):
-                        afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_index + 1])}"
+                    if attraction_base_index < len(attractions):
+                        early_morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_base_index])}"
+                    if attraction_base_index + 1 < len(attractions):
+                        mid_morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_base_index + 1])}"
+                    if attraction_base_index + 2 < len(attractions):
+                        afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_base_index + 2])}"
+                    if attraction_base_index + 3 < len(attractions):
+                        late_afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[attraction_base_index + 3])}"
                 
                 # Add restaurant recommendation for evening if available
                 evening_restaurant = ""
                 if restaurants and day_num <= len(restaurants):
                     evening_restaurant = f" at {format_restaurant_for_itinerary(restaurants[day_num-1])}"
                 
-                parts.append(f"- ☀️ **9:00 AM - 12:00 PM:** {morning_acts[0].capitalize()}{morning_attraction}\n")
-                parts.append(f"- 🎯 **1:00 PM - 5:00 PM:** {afternoon_acts[0].capitalize()}{afternoon_attraction}\n")
-                parts.append(f"- 🌙 **7:00 PM - 9:00 PM:** {evening_acts[0].capitalize()}{evening_restaurant}\n\n")
+                # Generate 4-5 time slots for comprehensive daily schedule
+                parts.append(f"- 🌅 **8:00 AM - 10:00 AM:** {early_morning_acts[0].capitalize()}{early_morning_attraction}\n")
+                parts.append(f"- 🛬 **10:30 AM - 1:00 PM:** {mid_morning_acts[0].capitalize()}{mid_morning_attraction}\n")
+                parts.append(f"- 🎯 **2:00 PM - 4:30 PM:** {afternoon_acts[0].capitalize()}{afternoon_attraction}\n")
+                parts.append(f"- ☀️ **5:00 PM - 6:30 PM:** {late_afternoon_acts[0].capitalize()}{late_afternoon_attraction}\n")
+                parts.append(f"- 🌙 **7:30 PM - 9:30 PM:** {evening_acts[0].capitalize()}{evening_restaurant}\n\n")
         
         # Travel Tips
         parts.append("---\n\n## 💡 Travel Tips\n\n")
@@ -1419,24 +1454,8 @@ Thought: {agent_scratchpad}""")
         
         parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
         
-        # Convert markdown to HTML
-        import re
+        # Return plain text (no HTML conversion)
         itinerary_text = "".join(parts)
-        
-        # Convert horizontal rules FIRST (before replacing newlines)
-        itinerary_text = re.sub(r'---\n', r'<hr/>\n', itinerary_text)
-        
-        # Convert headers SECOND (before replacing newlines)
-        itinerary_text = re.sub(r'### \*\*(.*?)\*\*', r'<h3><strong>\1</strong></h3>', itinerary_text)
-        itinerary_text = re.sub(r'## \*\*(.*?)\*\*', r'<h2><strong>\1</strong></h2>', itinerary_text)
-        itinerary_text = re.sub(r'# \*\*(.*?)\*\*', r'<h1><strong>\1</strong></h1>', itinerary_text)
-        
-        # Convert list items (- or •) to HTML bullets
-        itinerary_text = re.sub(r'\n- ', r'\n• ', itinerary_text)  # Normalize bullets
-        
-        # Finally replace newlines with <br/>
-        itinerary_text = itinerary_text.replace('\n', '<br/>\n')
-        
         return itinerary_text
     
     def _extract_flight_cards(self, flight_data, departure_city, destination, memory):
@@ -1458,8 +1477,8 @@ Thought: {agent_scratchpad}""")
                         "arrival_time": flight_info.get('arrival_time', '13:30'),
                         "duration": flight_info.get('duration', '4h 45m'),
                         "price_round_trip": flight_info.get('price', '$316'),
-                        "departure_date": memory.entities.get('travel_dates', 'Dec 9, 2025').split(' to ')[0] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) else 'Dec 9, 2025',
-                        "return_date": memory.entities.get('travel_dates', 'Dec 9, 2025 to Dec 12, 2025').split(' to ')[1] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and ' to ' in memory.entities.get('travel_dates', '') else 'Dec 12, 2025',
+                        "departure_date": (memory.entities.get('travel_dates') or 'Dec 9, 2025').split(' to ')[0] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and memory.entities.get('travel_dates') else 'Dec 9, 2025',
+                        "return_date": (memory.entities.get('travel_dates') or 'Dec 9, 2025 to Dec 12, 2025').split(' to ')[1] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and memory.entities.get('travel_dates') and ' to ' in memory.entities.get('travel_dates') else 'Dec 12, 2025',
                         "cabin_class": "Economy",
                         "stops": flight_info.get('stops', 'Direct'),
                         "booking_links": [
@@ -1509,8 +1528,8 @@ Thought: {agent_scratchpad}""")
                 "arrival_time": timing["arrive"],
                 "duration": timing["duration"],
                 "price_round_trip": f"${price}",
-                "departure_date": memory.entities.get('travel_dates', 'Dec 9, 2025').split(' to ')[0] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) else 'Dec 9, 2025',
-                "return_date": memory.entities.get('travel_dates', 'Dec 9, 2025 to Dec 12, 2025').split(' to ')[1] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and ' to ' in memory.entities.get('travel_dates', '') else 'Dec 12, 2025',
+                "departure_date": (memory.entities.get('travel_dates') or 'Dec 9, 2025').split(' to ')[0] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and memory.entities.get('travel_dates') else 'Dec 9, 2025',
+                "return_date": (memory.entities.get('travel_dates') or 'Dec 9, 2025 to Dec 12, 2025').split(' to ')[1] if memory and hasattr(memory, 'entities') and isinstance(memory.entities, dict) and memory.entities.get('travel_dates') and ' to ' in memory.entities.get('travel_dates') else 'Dec 12, 2025',
                 "cabin_class": "Economy",
                 "stops": "Direct",
                 "booking_links": [

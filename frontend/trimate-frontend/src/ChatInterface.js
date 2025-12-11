@@ -37,7 +37,7 @@ export default function ChatInterface({ onBackToHome }) {
   const [showMap, setShowMap] = useState(false);
   const [currentDestination, setCurrentDestination] = useState(null);
   const [currentHotels, setCurrentHotels] = useState([]);
-  const [currentActivities, setCurrentActivities] = useState([]);
+  const [currentActivities] = useState([]);
   const [departureCity, setDepartureCity] = useState(null);
   const [destination, setDestination] = useState(null);
   const [travelDates, setTravelDates] = useState(null);
@@ -46,24 +46,75 @@ export default function ChatInterface({ onBackToHome }) {
   // Parse itinerary text into structured format
   const parseItineraryText = (text, duration) => {
     const days = [];
-    const dayPattern = /Day (\d+)[:\s-]*(.*?)(?=Day \d+|$)/gis;
+    
+    // Enhanced pattern to capture both "Day X" and "### **Day X**" formats
+    const dayPattern = /(?:^|\n)(?:###?\s*\*?\*?)?Day\s+(\d+)(?:\*?\*?)?\s*(?:-\s*[^\n]*)?(?:\n|$)(.*?)(?=(?:\n(?:###?\s*\*?\*?)?Day\s+\d+)|$)/gis;
     let match;
     
     while ((match = dayPattern.exec(text)) !== null) {
       const dayNum = parseInt(match[1]);
       const dayContent = match[2].trim();
       
-      // Extract activities from day content
-      const activities = dayContent
-        .split(/[•\-\n]/) // Split by bullet points, dashes, or newlines
-        .map(activity => activity.trim())
-        .filter(activity => activity.length > 0 && !activity.match(/^\*\*|^#/))
-        .slice(0, 5); // Limit to 5 activities per day
+      // Extract date if present
+      let dayDate = null;
+      const dateMatch = dayContent.match(/(\w+\s+\d+,\s+\d+)/);
+      if (dateMatch) {
+        dayDate = dateMatch[1];
+      }
+      
+      // Extract activities - look for bullet points or lines starting with emoji/icons
+      const activities = [];
+      
+      // Split by lines and process each activity
+      const lines = dayContent.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      
+      for (const line of lines) {
+        // Skip date lines, section headers, and empty lines
+        if (line.match(/^\w+\s+\d+,\s+\d+/) || // Date pattern
+            line.match(/^#+\s/) || // Headers (## Travel Tips, ## Budget, etc.)
+            line.match(/^\*\*[^*]+\*\*$/) || // Bold headers
+            line.match(/^---+/) || // Dividers
+            line.match(/^💡|^💰|^🎒/) || // Section icons (Travel Tips, Budget, Packing)
+            line.match(/Total Estimated Budget/) || // Budget summary line
+            line.match(/Ready for your.*adventure/) || // Closing message
+            line.length < 5) { // Too short
+          continue;
+        }
+        
+        // Skip budget and packing list items (they have specific patterns)
+        if (line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*Accommodation:/) || // Budget items
+            line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*(Food|Activities|Transport):/) ||
+            line.match(/^(Comfortable walking shoes|Weather-appropriate|Camera|Travel adapter|Basic first aid|Sunscreen|Reusable water|Swimwear|Beach towel|Sports shoes|Quick-dry|Action camera)/)) { // Packing items
+          continue;
+        }
+        
+        // Look for activity lines (start with bullet, dash, or activity emojis)
+        if (line.match(/^[-•]\s*/) || // Bullet points
+            line.match(/^[🛬🗺️🍽️🎯🌙☀️🛍️📦✈️🌅]/)) { // Activity emojis
+          
+          // Clean up the line - remove leading bullets/dashes
+          let cleanLine = line.replace(/^[-•]\s*/, '').trim();
+          
+          // Final check: skip if this looks like a tip or budget item
+          if (cleanLine.match(/^(Best time to visit|Getting around|Currency|Language|Safety):/) ||
+              cleanLine.match(/^\*\*(Accommodation|Food|Activities|Transport):\*\*/) ||
+              cleanLine.match(/^Total Estimated Budget/)) {
+            continue;
+          }
+          
+          // Only add if it's substantial content and looks like an activity
+          if (cleanLine.length > 10) {
+            activities.push(cleanLine);
+          }
+        }
+      }
       
       if (activities.length > 0) {
         days.push({
           day: dayNum,
-          date: null, // Can be calculated from start_date if needed
+          date: dayDate,
           activities: activities
         });
       }
@@ -278,23 +329,94 @@ export default function ChatInterface({ onBackToHome }) {
                   // Parse structured itinerary from currentTripData if available
                   if (currentTripData && currentTripData.itinerary && Array.isArray(currentTripData.itinerary)) {
                     return currentTripData.itinerary.map((day, idx) => (
-                      <ItineraryCard 
-                        key={idx} 
-                        dayData={day} 
-                        dayNumber={day.day || idx + 1} 
-                      />
+                      <Box key={idx} sx={{ 
+                        mb: 3, 
+                        p: 2, 
+                        backgroundColor: '#f8f9ff', 
+                        borderRadius: 2, 
+                        borderLeft: '4px solid #1976d2'
+                      }}>
+                        <Typography variant="h5" sx={{ 
+                          fontWeight: 'bold', 
+                          mb: 1.5, 
+                          color: '#1976d2',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}>
+                          📅 Day {day.day || idx + 1}
+                          {day.date && (
+                            <Typography component="span" sx={{ 
+                              fontSize: '0.8em', 
+                              fontWeight: 'normal', 
+                              ml: 1, 
+                              color: '#666',
+                              fontStyle: 'italic'
+                            }}>
+                              {day.date}
+                            </Typography>
+                          )}
+                        </Typography>
+                        <Box sx={{ pl: 1 }}>
+                          {day.activities && day.activities.map((activity, actIdx) => (
+                            <Typography key={actIdx} sx={{ 
+                              mb: 1, 
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              fontSize: '1rem',
+                              lineHeight: 1.6
+                            }}>
+                              <Box component="span" sx={{ 
+                                color: '#1976d2', 
+                                mr: 1, 
+                                fontSize: '1.2em',
+                                minWidth: '20px'
+                              }}>
+                                •
+                              </Box>
+                              <Box component="span" sx={{ color: '#333' }}>
+                                {activity}
+                              </Box>
+                            </Typography>
+                          ))}
+                        </Box>
+                      </Box>
                     ));
                   }
                   
-                  // Fallback: Parse from itinerary text with better HTML cleaning
+                  // Enhanced cleaning - handle bullet points and HTML links properly
                   const cleanText = itineraryText
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
+                    .replace(/<a[^>]*href="[^"]*"[^>]*title="[^"]*"[^>]*>([^<]+)<\/a>/gi, '$1') // Extract text from Google Maps links
+                    .replace(/<a[^>]*>([^<]+)<\/a>/gi, '$1') // Extract text from other links
+                    .replace(/<a[^>]*>/gi, '') // Remove broken opening <a> tags
+                    .replace(/<\/a>/gi, '') // Remove orphaned closing </a> tags
                     .replace(/<br\s*\/?>/gi, '\n') // Convert <br> tags to newlines
-                    .replace(/<[^>]+>/g, '') // Remove all other HTML tags
-                    .replace(/&nbsp;/g, ' ') // Replace HTML entities
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/\n\s*\n/g, '\n'); // Normalize line breaks
+                    .replace(/<\/?(h[1-6]|div|span|p|ul|ol|li)[^>]*>/gi, '') // Remove structural tags
+                    .replace(/<[^>]+>/g, '') // Remove remaining HTML tags
+                    .replace(/&nbsp;/g, ' ') // Convert non-breaking spaces
+                    .replace(/&amp;/g, '&') // Keep ampersands in place names
+                    .replace(/&lt;/g, '<') // Convert less than
+                    .replace(/&gt;/g, '>') // Convert greater than
+                    .replace(/&quot;/g, '"') // Convert quotes
+                    .replace(/&#[0-9]+;/g, ' ') // Remove other numeric entities
+                    .replace(/\u00A0/g, ' ') // Non-breaking space Unicode
+                    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Zero-width spaces
+                    .replace(/\*{3,}/g, '') // Remove triple+ asterisks only
+                    .replace(/_{3,}/g, '') // Remove triple+ underscores only
+                    .replace(/[⚡✨]/g, '') // Remove some emojis but keep food/location ones
+                    .replace(/\(\d+\s*reviews?\)/gi, ' ($1 reviews)') // Keep review counts but clean format
+                    .replace(/^\s*•\s*/gm, '') // Remove bullet points at start of lines
+                    .replace(/\s*•\s*/g, ' - ') // Convert bullets to dashes in middle
+                    .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove double asterisk bold formatting
+                    .replace(/\n\s*\n+/g, '\n') // Normalize line breaks
+                    .replace(/\s{3,}/g, ' ') // Normalize excessive spaces only
+                    .replace(/^\s+|\s+$/gm, '') // Trim each line
+                    // PRESERVE time range dashes - convert any weird dashes to proper ones
+                    .replace(/(\d+:\d+\s*(?:AM|PM)?)\s*[–—•\u2022]\s*(\d+:\d+\s*(?:AM|PM)?)/gi, '$1 - $2')
+                    // Convert standalone bullets to dashes
+                    .replace(/\u2022/g, ' - ')
+                    .trim();
                   
                   // Find the "Daily Itinerary" section
                   const itineraryMatch = cleanText.match(/##\s*📅\s*Daily Itinerary\s*([\s\S]*?)(?=\n##|$)/i);
@@ -316,18 +438,80 @@ export default function ChatInterface({ onBackToHome }) {
                         .replace(/&nbsp;/g, ' ')
                         .trim();
                       
-                      // Extract activities from content - more flexible patterns
-                      const activities = content
-                        .split('\n')
-                        .map(line => line.trim())
-                        .filter(line => 
-                          line.startsWith('-') || 
-                          line.startsWith('•') || 
-                          line.startsWith('*') ||
-                          (line.includes(':') && line.match(/\d+:\d+/)) // Include time-based activities
-                        )
-                        .map(line => line.replace(/^[-•*]\s*/, '').trim())
-                        .filter(item => item.length > 0 && !item.match(/^#+/)); // Filter out headers
+                      // Extract real activities with Google Places API data and user preferences
+                      const activities = [];
+                      
+                      // Split content into lines and clean them
+                      const lines = content.split(/[\n\r]+/).map(line => line.trim()).filter(line => line.length > 5);
+                      
+                      for (let line of lines) {
+                        // Skip headers and day markers
+                        if (!line || line.match(/^#+/) || line.match(/^\*\*Day\s*\d+/) || line.match(/^Day\s*\d+/i)) continue;
+                        
+                        // Clean the line while preserving restaurant and activity names
+                        let cleanActivity = line
+                          .replace(/^[-•*]\s*/, '') // Remove bullets
+                          .replace(/\*\*/g, '') // Remove bold markers
+                          .trim();
+                        
+                        // If this looks like a real activity with time or substantial content
+                        if (cleanActivity && cleanActivity.length > 15) {
+                          
+                          // Extract time range if present - handle multiple dash types including Unicode bullet
+                          const timeMatch = cleanActivity.match(/(\d+:\d+\s*(?:AM|PM)?\s*[-–—•\u2022]\s*\d+:\d+\s*(?:AM|PM)?)/i);
+                          let timeRange = '';
+                          let activityText = cleanActivity;
+                          
+                          if (timeMatch) {
+                            // Normalize the time range to use proper dash
+                            timeRange = timeMatch[1].replace(/[-–—•\u2022]/g, ' - ');
+                            activityText = cleanActivity.replace(timeMatch[0], '').replace(/^[:*\s-]+/, '').trim();
+                          }
+                          
+                          // Clean up the activity text while preserving restaurant/place names
+                          activityText = activityText
+                            .replace(/^(🛬|🗺️|🍽️|🎯|☀️|🛍️|📦|✈️)\s*/, '') // Remove emoji prefixes
+                            .replace(/\*+/g, '') // Remove remaining asterisks
+                            .trim();
+                          
+                          // Only include if it has meaningful content
+                          if (activityText && activityText.length > 10 && 
+                              !activityText.match(/^(AM|PM|December)$/i)) {
+                            
+                            // Debug log for restaurant data
+                            if (activityText.includes('Restaurant') || activityText.includes('Cafe')) {
+                              console.log('🍽️ Parsed restaurant:', activityText);
+                            }
+                            
+                            // If no time range found, generate one based on position
+                            if (!timeRange) {
+                              if (activities.length === 0) {
+                                timeRange = '9:00 AM - 12:00 PM';
+                              } else if (activities.length === 1) {
+                                timeRange = '1:00 PM - 5:00 PM';
+                              } else if (activities.length === 2) {
+                                timeRange = '7:00 PM - 9:00 PM';
+                              } else {
+                                timeRange = `${9 + (activities.length * 3)}:00 AM - ${12 + (activities.length * 3)}:00 PM`;
+                              }
+                            }
+                            
+                            // Ensure proper dash character in time range
+                            timeRange = timeRange.replace(/[-–—•\u2022]/g, ' - ').replace(/\s+/g, ' ').trim();
+                            
+                            activities.push(`${timeRange}: ${activityText}`);
+                          }
+                        }
+                      }
+                      
+                      // If no activities parsed, create minimal fallback 
+                      if (activities.length === 0) {
+                        if (dayNum === 1) {
+                          activities.push('9:00 AM - 12:00 PM: Arrival and hotel check-in');
+                        } else {
+                          activities.push('9:00 AM - 6:00 PM: Local activities and dining');
+                        }
+                      }
                       
                       if (activities.length > 0) {
                         days.push({
@@ -339,11 +523,57 @@ export default function ChatInterface({ onBackToHome }) {
                     }
                     
                     return days.map((day, idx) => (
-                      <ItineraryCard 
-                        key={idx} 
-                        dayData={day} 
-                        dayNumber={day.day} 
-                      />
+                      <Box key={idx} sx={{ 
+                        mb: 3, 
+                        p: 2, 
+                        backgroundColor: '#f8f9ff', 
+                        borderRadius: 2, 
+                        borderLeft: '4px solid #1976d2'
+                      }}>
+                        <Typography variant="h5" sx={{ 
+                          fontWeight: 'bold', 
+                          mb: 1.5, 
+                          color: '#1976d2',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}>
+                          📅 Day {day.day}
+                          {day.date && (
+                            <Typography component="span" sx={{ 
+                              fontSize: '0.8em', 
+                              fontWeight: 'normal', 
+                              ml: 1, 
+                              color: '#666',
+                              fontStyle: 'italic'
+                            }}>
+                              {day.date}
+                            </Typography>
+                          )}
+                        </Typography>
+                        <Box sx={{ pl: 1 }}>
+                          {day.activities && day.activities.map((activity, actIdx) => (
+                            <Typography key={actIdx} sx={{ 
+                              mb: 1, 
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              fontSize: '1rem',
+                              lineHeight: 1.6
+                            }}>
+                              <Box component="span" sx={{ 
+                                color: '#1976d2', 
+                                mr: 1, 
+                                fontSize: '1.2em',
+                                minWidth: '20px'
+                              }}>
+                                •
+                              </Box>
+                              <Box component="span" sx={{ color: '#333' }}>
+                                {activity}
+                              </Box>
+                            </Typography>
+                          ))}
+                        </Box>
+                      </Box>
                     ));
                   }
                   
@@ -503,8 +733,24 @@ export default function ChatInterface({ onBackToHome }) {
       }}
       dangerouslySetInnerHTML={{ 
         __html: msg.message.includes('<a ') || msg.message.includes('<div') 
-          ? msg.message  // If HTML detected, don't modify
-          : msg.message.replace(/\n/g, '<br/>')  // Otherwise convert newlines
+          ? msg.message
+              // Fix the specific broken pattern: **9:00 AM\n•\n12:00 PM:** text
+              .replace(/(\*\*\d+:\d+\s*(?:AM|PM)?)\s*\n\s*•\s*\n\s*(\d+:\d+\s*(?:AM|PM)?\*\*:)/gi, '$1 - $2')
+              // Fix incomplete time patterns like **1:00 PM\n without closing
+              .replace(/(\*\*\d+:\d+\s*(?:AM|PM)?)\s*\n\s*•\s*$/gim, '$1:**')
+              // Clean up malformed HTML links
+              .replace(/<a[^>]*href="[^"]*"[^>]*>/g, '') // Remove broken opening <a> tags
+              .replace(/<\/a>/g, '') // Remove closing </a> tags
+              // Convert bullets between times
+              .replace(/(\d+:\d+\s*(?:AM|PM)?)\s*•\s*(\d+:\d+\s*(?:AM|PM)?)/gi, '$1 - $2')
+              // Remove standalone bullet lines
+              .replace(/\n\s*•\s*\n/g, '\n') 
+              // Convert remaining bullets to dashes
+              .replace(/•/g, ' - ')
+              // Clean up formatting
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Convert ** to <strong>
+              .replace(/\n{3,}/g, '\n\n') // Normalize excessive newlines
+          : msg.message.replace(/\n/g, '<br/>').replace(/•/g, ' - ')  // Convert newlines and bullets
       }}
       />
     );

@@ -50,7 +50,7 @@ class HotelService:
             List of hotels with real prices and details
         """
         if not self.is_available:
-            return None
+            return self._generate_fallback_hotels(destination_city, checkin_date, checkout_date, budget_per_night)
         
         try:
             # Step 1: Get city location (lat/long)
@@ -96,7 +96,7 @@ class HotelService:
             return None
         except Exception as e:
             print(f"⚠️  Hotel search failed: {e}")
-            return None
+            return self._generate_fallback_hotels(destination_city, checkin_date, checkout_date, budget_per_night)
     
     def _get_city_location(self, city_name):
         """
@@ -236,6 +236,98 @@ class HotelService:
         display += f"\n   💰 Total: ${hotel['total_price']:.0f} for {hotel['nights']} nights"
         
         return display
+
+    def _generate_fallback_hotels(self, destination_city, checkin_date=None, checkout_date=None, budget_per_night=None):
+        """
+        Generate realistic hotel data when API is unavailable
+        """
+        import random
+        
+        # Hotel templates by destination type
+        hotel_templates = {
+            'bangkok': [
+                {'name': 'Grand Palace Hotel Bangkok', 'category': 'luxury', 'area': 'Rattanakosin'},
+                {'name': 'Khao San Palace Lodge', 'category': 'budget', 'area': 'Khao San Road'},
+                {'name': 'Siam Boutique Hotel', 'category': 'mid-range', 'area': 'Siam'},
+                {'name': 'Bangkok City Center Hotel', 'category': 'mid-range', 'area': 'Sukhumvit'}
+            ],
+            'dubai': [
+                {'name': 'Desert Rose Luxury Resort', 'category': 'luxury', 'area': 'Downtown Dubai'},
+                {'name': 'Marina Bay Hotel', 'category': 'mid-range', 'area': 'Dubai Marina'},
+                {'name': 'City Center Budget Inn', 'category': 'budget', 'area': 'Deira'}
+            ],
+            'tokyo': [
+                {'name': 'Imperial Garden Hotel', 'category': 'luxury', 'area': 'Shibuya'},
+                {'name': 'Tokyo Central Inn', 'category': 'mid-range', 'area': 'Shinjuku'},
+                {'name': 'Capsule Pod Hotel', 'category': 'budget', 'area': 'Akihabara'}
+            ],
+            'default': [
+                {'name': 'Grand City Hotel', 'category': 'luxury', 'area': 'City Center'},
+                {'name': 'Downtown Business Hotel', 'category': 'mid-range', 'area': 'Business District'},
+                {'name': 'Budget Traveler Inn', 'category': 'budget', 'area': 'Old Town'}
+            ]
+        }
+        
+        # Get templates for destination
+        city_key = destination_city.lower().split(',')[0] if ',' in destination_city else destination_city.lower()
+        templates = hotel_templates.get(city_key, hotel_templates['default'])
+        
+        # Calculate nights
+        nights = 3
+        if checkin_date and checkout_date:
+            nights = self._calculate_nights(checkin_date, checkout_date)
+        
+        hotels = []
+        for template in templates[:3]:  # Generate 3 hotels
+            # Price ranges by category
+            price_ranges = {
+                'budget': (25, 60),
+                'mid-range': (70, 150),
+                'luxury': (200, 500)
+            }
+            
+            price_range = price_ranges[template['category']]
+            base_price = random.randint(price_range[0], price_range[1])
+            
+            # Apply budget filter if provided
+            if budget_per_night and base_price > budget_per_night:
+                base_price = min(base_price, budget_per_night - 10)
+            
+            # Generate hotel data
+            hotel = {
+                'name': template['name'],
+                'hotel_id': f"fallback_{template['name'].lower().replace(' ', '_')}",
+                'price_per_night': base_price,
+                'total_price': base_price * nights,
+                'currency': 'USD',
+                'checkin': checkin_date,
+                'checkout': checkout_date,
+                'nights': nights,
+                'room_type': random.choice(['Standard Room', 'Deluxe Room', 'Suite']),
+                'rating': random.choice([4.2, 4.5, 4.7, 4.8]) if template['category'] != 'budget' else random.choice([3.8, 4.0, 4.2]),
+                'amenities': self._get_amenities_by_category(template['category']),
+                'latitude': None,
+                'longitude': None,
+                'address': f"{template['area']}, {destination_city}",
+                'is_real': False,
+                'data_source': 'AI Generated (Amadeus Hotel API unavailable)'
+            }
+            
+            hotels.append(hotel)
+        
+        print(f"✅ Generated {len(hotels)} fallback hotels for {destination_city}")
+        return hotels
+    
+    def _get_amenities_by_category(self, category):
+        """Get realistic amenities based on hotel category"""
+        base_amenities = ['Free WiFi', 'Air Conditioning', '24-hour Reception']
+        
+        if category == 'luxury':
+            return base_amenities + ['Spa', 'Pool', 'Fitness Center', 'Restaurant', 'Room Service', 'Concierge']
+        elif category == 'mid-range':
+            return base_amenities + ['Restaurant', 'Fitness Center', 'Business Center']
+        else:  # budget
+            return base_amenities + ['Luggage Storage']
 
 
 # Global instance

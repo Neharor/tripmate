@@ -216,54 +216,30 @@ class GooglePlacesService:
 
 
 def format_restaurant_for_itinerary(restaurant):
-    """Format a restaurant dict as a markdown string for the itinerary with Google Maps link and hover tooltip."""
+    """Format a restaurant dict as a plain text string for the itinerary."""
     rating_text = f"{restaurant['rating']}⭐" if restaurant.get('rating') else "N/A"
     reviews_text = f"({restaurant.get('user_ratings_total', 0)} reviews)" if restaurant.get('user_ratings_total') else ""
     
-    # Create Google Maps link from place_id
-    place_id = restaurant.get('place_id', '')
     name = restaurant['name']
-    address = restaurant.get('address', 'N/A')
-    
-    if place_id:
-        # Make the name a clickable link with title attribute for hover tooltip
-        name_link = f'<a href="https://www.google.com/maps/place/?q=place_id:{place_id}" target="_blank" title="{address}">{name}</a>'
-    else:
-        name_link = f"**{name}**"
     
     return (
-        f"{name_link} {rating_text} {reviews_text} - "
+        f"{name} {rating_text} {reviews_text} - "
         f"{restaurant.get('specialty', 'Restaurant')}. "
         f"Try: {restaurant.get('highlights', 'Local specialties')}"
     )
 
 
 def format_attraction_for_itinerary(attraction):
-    """Format an attraction dict as a markdown string for the itinerary with Google Maps link and hover tooltip."""
+    """Format an attraction dict as a plain text string for the itinerary."""
     rating_text = f"{attraction['rating']}⭐" if attraction.get('rating') else ""
     reviews_text = f"({attraction.get('user_ratings_total', 0)} reviews)" if attraction.get('user_ratings_total') else ""
     
-    # Create Google Maps link from place_id
-    place_id = attraction.get('place_id', '')
     name = attraction['name']
-    address = attraction.get('address', 'N/A')
-    description = attraction.get('description', '')
-    
-    # Create hover text with address and description
-    hover_text = f"{address}"
-    if description:
-        hover_text = f"{description} | {address}"
-    
-    if place_id:
-        # Make the name a clickable link with title attribute for hover tooltip
-        name_link = f'<a href="https://www.google.com/maps/place/?q=place_id:{place_id}" target="_blank" title="{hover_text}">{name}</a>'
-    else:
-        name_link = f"**{name}**"
     
     if rating_text and reviews_text:
-        return f"{name_link} {rating_text} {reviews_text}"
+        return f"{name} {rating_text} {reviews_text}"
     else:
-        return f"{name_link}"
+        return f"{name}"
 
 
 # Test function
