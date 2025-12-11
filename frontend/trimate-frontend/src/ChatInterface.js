@@ -83,29 +83,53 @@ export default function ChatInterface({ onBackToHome }) {
           continue;
         }
         
-        // Skip budget and packing list items (they have specific patterns)
-        if (line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*Accommodation:/) || // Budget items
-            line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*(Food|Activities|Transport):/) ||
-            line.match(/^(Comfortable walking shoes|Weather-appropriate|Camera|Travel adapter|Basic first aid|Sunscreen|Reusable water|Swimwear|Beach towel|Sports shoes|Quick-dry|Action camera)/)) { // Packing items
+        // Comprehensive filtering to skip all non-activity content
+        const skipPatterns = [
+          // Section headers
+          'Travel Tips', 'Budget Estimate', 'Packing List', 'Suggested Packing List',
+          'Budget Breakdown', 'Total Estimated Budget', 'Ready for your', 'Have an amazing trip',
+          
+          // Travel advice patterns  
+          'Best time to visit', 'Getting around', 'Currency', 'Language', 'Safety',
+          'Check seasonal weather', 'Use local transport', 'Bring local currency',
+          'Keep valuables secure', 'Learn basic local phrases', 'ride-sharing apps',
+          'rent vehicles', 'well-lit areas',
+          
+          // Budget items
+          'Accommodation:', 'Food & Dining:', 'Activities:', 'Transport:',
+          '/day (', 'total)', '/day ($', '$', 'per day',
+          
+          // Packing list items (exact and partial matches)
+          'Comfortable walking shoes', 'Weather-appropriate clothing', 'Camera/phone for photos',
+          'Travel adapter', 'Basic first aid kit', 'Sunscreen and sunglasses', 'Reusable water bottle',
+          'Beach towel', 'Waterproof bag', 'Swimwear', 'Sports shoes', 'Quick-dry clothes',
+          'Action camera', 'Sandals', 'Hat', 'Insect repellent',
+          'omfortable walking', 'eather-appropriate', 'amera/phone', 'ravel adapter',
+          'asic first aid', 'unscreen and sun', 'eusable water', 'each towel', 'aterproof bag'
+        ];
+        
+        if (skipPatterns.some(pattern => line.includes(pattern))) {
           continue;
         }
         
-        // Look for activity lines (start with bullet, dash, or activity emojis)
-        if (line.match(/^[-•]\s*/) || // Bullet points
-            line.match(/^[🛬🗺️🍽️🎯🌙☀️🛍️📦✈️🌅]/)) { // Activity emojis
-          
-          // Clean up the line - remove leading bullets/dashes
+        // Skip budget items with specific patterns
+        if (line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*Accommodation:/) || 
+            line.match(/^\*?\*?[🏨🍽️🎯🚕]\s*\*?\*?\s*(Food|Activities|Transport):/)) {
+          continue;
+        }
+        
+        // AGGRESSIVE FILTERING: Only include actual timed activities
+        if (line.match(/^[-•]\s*/) || line.match(/^[🛬🗺️🍽️🎯🌙☀️🛍️📦✈️🌅]/)) {
           let cleanLine = line.replace(/^[-•]\s*/, '').trim();
           
-          // Final check: skip if this looks like a tip or budget item
-          if (cleanLine.match(/^(Best time to visit|Getting around|Currency|Language|Safety):/) ||
-              cleanLine.match(/^\*\*(Accommodation|Food|Activities|Transport):\*\*/) ||
-              cleanLine.match(/^Total Estimated Budget/)) {
-            continue;
-          }
+          // STRICT CRITERIA: Only include if it has time markers AND is not in skip patterns
+          const hasTimeMarker = cleanLine.includes('AM') || cleanLine.includes('PM') || cleanLine.includes(':**');
+          const isSkippedContent = skipPatterns.some(pattern => cleanLine.includes(pattern));
+          const isActivity = cleanLine.includes('Visit') || cleanLine.includes('Explore') || 
+                           cleanLine.includes('Check out') || cleanLine.includes('Depart') || cleanLine.includes('Arrive');
           
-          // Only add if it's substantial content and looks like an activity
-          if (cleanLine.length > 10) {
+          // ONLY include if it has time markers OR is a clear activity AND not skipped content
+          if ((hasTimeMarker || isActivity) && !isSkippedContent && cleanLine.length > 15) {
             activities.push(cleanLine);
           }
         }

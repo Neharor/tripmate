@@ -80,12 +80,12 @@ def create_hotel_tool(stays_agent):
 
 def create_activities_tool(activities_agent):
     """
-    Creates a LangChain tool for activities search
+    Creates a LangChain tool for activities search with user context
     """
     def search_activities(query: str) -> str:
         """
-        Search for activities, tours, and experiences based on destination and interests.
-        Returns curated activity recommendations.
+        Search for activities, tours, and experiences based on destination, interests, companions, and preferences.
+        Include user context like: traveling with family/couple/solo, dietary preferences for food experiences.
         """
         try:
             result = activities_agent.handle_request(query)
@@ -94,8 +94,8 @@ def create_activities_tool(activities_agent):
             return f"Activities search error: {str(e)}"
     
     return Tool(
-        name="ActivityRecommender",
-        description="Recommend activities, tours, and experiences. Use this when user asks what to do, things to see, or experiences at destination. Returns interest-based activity recommendations.",
+        name="ActivityRecommender", 
+        description="Recommend personalized activities based on destination, interests, travel companions (solo/couple/family/friends), and preferences. ALWAYS include companion type and dietary restrictions in query (e.g., 'Bangkok culture activities for couple with vegetarian food preferences').",
         func=search_activities
     )
 

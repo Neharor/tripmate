@@ -80,10 +80,15 @@ GUIDELINES:
 CRITICAL: When creating a COMPLETE trip itinerary, you MUST use ALL of these tools:
    - FlightPlanner (find flights from departure city to destination)
    - HotelPlanner (find accommodations in destination)
-   - ActivityRecommender (find activities matching user interests)
+   - ActivityRecommender (find activities matching user interests, companions, and dietary preferences)
    - LocalEventsDiscoverer (find events during travel dates)
 
 DO NOT skip any of these tools when creating a full trip plan. Users expect flights, hotels, activities, AND events.
+
+PERSONALIZATION REQUIREMENTS:
+- ALWAYS include user's travel companion type in ActivityRecommender queries (solo/couple/family/friends)
+- ALWAYS include dietary preferences when asking for food experiences
+- Example: "Bangkok culture activities for couple with vegetarian preferences and $100 budget"
 
 After collecting ALL the information, create a comprehensive day-by-day itinerary in your Final Answer that includes:
    - Flight details and recommendations
@@ -100,6 +105,15 @@ After collecting ALL the information, create a comprehensive day-by-day itinerar
      - Evening: [activity]
    - Local events happening during the trip
    - Budget breakdown
+
+ACTIVITY BALANCE REQUIREMENT:
+- ALWAYS create DIVERSE itineraries that include ALL user interests equally
+- If user selects multiple interests (e.g., "Nightlife, Nature, History"), ensure EACH gets representation
+- Morning/Afternoon: Culture, History, Nature, Sightseeing activities
+- Evening: Nightlife, Dining, Entertainment activities  
+- NEVER suggest nightlife activities (bars, clubs) during morning hours (8-11 AM)
+- Each day should balance ALL user interests: history + nature + nightlife (at appropriate times)
+- Include iconic landmarks: For Paris (Eiffel Tower, Louvre, Arc de Triomphe, Notre-Dame, Versailles)
    
 Format your Final Answer as a detailed, well-structured itinerary text with clear day-by-day sections.
 
@@ -855,10 +869,10 @@ Thought: {agent_scratchpad}""")
                 
                 parts.append(f"- ☀️ **Morning:** {morning_acts[0].capitalize()}\n")
                 parts.append(f"- 🎯 **Afternoon:** {afternoon_acts[0].capitalize()}\n")
-                parts.append(f"- 🌙 **Evening:** {evening_acts[0].capitalize()}\n\n")
+                parts.append(f"- **Evening:** {evening_acts[0].capitalize()}\n\n")
         
         # Travel Tips
-        parts.append("---\n\n## 💡 Travel Tips\n\n")
+        parts.append("---\n\n## Travel Tips\n\n")
         parts.append(f"- **Best time to visit:** Check seasonal weather for {destination}\n")
         parts.append(f"- **Getting around:** Use local transport, ride-sharing apps, or rent vehicles\n")
         parts.append(f"- **Currency:** Bring local currency and cards\n")
@@ -866,7 +880,7 @@ Thought: {agent_scratchpad}""")
         parts.append(f"- **Safety:** Keep valuables secure, stay in well-lit areas\n\n")
         
         # Budget Breakdown
-        parts.append("## 💰 Budget Estimate\n\n")
+        parts.append("## Budget Estimate\n\n")
         budget_num = 100
         try:
             import re
@@ -876,14 +890,14 @@ Thought: {agent_scratchpad}""")
         except:
             pass
         
-        parts.append(f"- 🏨 **Accommodation:** ${budget_num * 0.4:.0f}/day (${budget_num * 0.4 * days:.0f} total)\n")
-        parts.append(f"- 🍽️ **Food & Dining:** ${budget_num * 0.3:.0f}/day (${budget_num * 0.3 * days:.0f} total)\n")
-        parts.append(f"- 🎯 **Activities:** ${budget_num * 0.2:.0f}/day (${budget_num * 0.2 * days:.0f} total)\n")
-        parts.append(f"- 🚕 **Transport:** ${budget_num * 0.1:.0f}/day (${budget_num * 0.1 * days:.0f} total)\n\n")
-        parts.append(f"**💵 Total Estimated Budget:** ${budget_num * days}\n\n")
+        parts.append(f"- **Accommodation:** ${budget_num * 0.4:.0f}/day (${budget_num * 0.4 * days:.0f} total)\n")
+        parts.append(f"- **Food & Dining:** ${budget_num * 0.3:.0f}/day (${budget_num * 0.3 * days:.0f} total)\n")
+        parts.append(f"- **Activities:** ${budget_num * 0.2:.0f}/day (${budget_num * 0.2 * days:.0f} total)\n")
+        parts.append(f"- **Transport:** ${budget_num * 0.1:.0f}/day (${budget_num * 0.1 * days:.0f} total)\n\n")
+        parts.append(f"**Total Estimated Budget:** ${budget_num * days}\n\n")
         
         # Packing List
-        parts.append("## 🎒 Suggested Packing List\n\n")
+        parts.append("## Suggested Packing List\n\n")
         packing = ["Comfortable walking shoes", "Weather-appropriate clothing", "Camera/phone for photos", 
                    "Travel adapter", "Basic first aid kit", "Sunscreen and sunglasses", "Reusable water bottle"]
         
@@ -895,7 +909,7 @@ Thought: {agent_scratchpad}""")
         for item in packing:
             parts.append(f"- {item}\n")
         
-        parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
+        parts.append(f"\n---\n\n**Ready for your {destination} adventure!** Have an amazing trip!")
         
         # Return plain text (no HTML conversion)
         itinerary_text = "".join(parts)
@@ -904,8 +918,8 @@ Thought: {agent_scratchpad}""")
     def _format_enhanced_itinerary(self, destination, departure_city, days, budget, interests, flight_data, hotel_data, memory=None):
         """Generate ADVANCED ML-powered itinerary showcasing all capabilities"""
         
-        print(f"🎯 GENERATING ENHANCED ITINERARY: {destination}, {days} days")
-        print(f"🎯 Flight data type: {type(flight_data)}, Hotel data type: {type(hotel_data)}")
+        print(f"DEBUG: GENERATING ENHANCED ITINERARY: {destination}, {days} days")
+        print(f"DEBUG: Flight data type: {type(flight_data)}, Hotel data type: {type(hotel_data)}")
         
         from datetime import datetime, timedelta
         import random
@@ -1326,20 +1340,20 @@ Thought: {agent_scratchpad}""")
                 if attractions and len(attractions) > 1:
                     late_afternoon_attraction = f" - Visit {format_attraction_for_itinerary(attractions[1])}"
                 
-                parts.append(f"- 🛬 **9:00 AM - 12:00 PM:** Arrive in {destination}, check into hotel\n")
-                parts.append(f"- 🗺️ **1:00 PM - 3:30 PM:** Orientation walk, explore neighborhood{afternoon_attraction}\n")
-                parts.append(f"- ☀️ **4:00 PM - 6:00 PM:** Local area exploration{late_afternoon_attraction}\n")
-                parts.append(f"- 🍽️ **7:00 PM - 9:00 PM:** Welcome dinner{restaurant_text}\n")
-                parts.append(f"- 🌙 **9:30 PM - 10:30 PM:** Evening stroll, get acquainted with local atmosphere\n\n")
+                parts.append(f"- **9:00 AM - 12:00 PM:** Arrive in {destination}, check into hotel\n")
+                parts.append(f"- **1:00 PM - 3:30 PM:** Orientation walk, explore neighborhood{afternoon_attraction}\n")
+                parts.append(f"- **4:00 PM - 6:00 PM:** Local area exploration{late_afternoon_attraction}\n")
+                parts.append(f"- **7:00 PM - 9:00 PM:** Welcome dinner{restaurant_text}\n")
+                parts.append(f"- **9:30 PM - 10:30 PM:** Evening stroll, get acquainted with local atmosphere\n\n")
             elif day_num == days:
                 # Last day: Add shopping/souvenir attraction if available
                 morning_attraction = ""
                 if attractions and len(attractions) > (days-2)*2:
                     morning_attraction = f" - Visit {format_attraction_for_itinerary(attractions[-1])}"
                 
-                parts.append(f"- 🛍️ **9:00 AM - 12:00 PM:** Last-minute shopping and photos{morning_attraction}\n")
-                parts.append(f"- 📦 **1:00 PM - 3:00 PM:** Check out, prepare for departure\n")
-                parts.append(f"- ✈️ **6:00 PM onwards:** Depart for {departure_city}\n\n")
+                parts.append(f"- **9:00 AM - 12:00 PM:** Last-minute shopping and photos{morning_attraction}\n")
+                parts.append(f"- **1:00 PM - 3:00 PM:** Check out, prepare for departure\n")
+                parts.append(f"- **6:00 PM onwards:** Depart for {departure_city}\n\n")
             else:
                 # Middle days - create comprehensive itinerary with 4-5 time slots
                 
@@ -1414,15 +1428,15 @@ Thought: {agent_scratchpad}""")
                 if restaurants and day_num <= len(restaurants):
                     evening_restaurant = f" at {format_restaurant_for_itinerary(restaurants[day_num-1])}"
                 
-                # Generate 4-5 time slots for comprehensive daily schedule
-                parts.append(f"- 🌅 **8:00 AM - 10:00 AM:** {early_morning_acts[0].capitalize()}{early_morning_attraction}\n")
-                parts.append(f"- 🛬 **10:30 AM - 1:00 PM:** {mid_morning_acts[0].capitalize()}{mid_morning_attraction}\n")
-                parts.append(f"- 🎯 **2:00 PM - 4:30 PM:** {afternoon_acts[0].capitalize()}{afternoon_attraction}\n")
-                parts.append(f"- ☀️ **5:00 PM - 6:30 PM:** {late_afternoon_acts[0].capitalize()}{late_afternoon_attraction}\n")
-                parts.append(f"- 🌙 **7:30 PM - 9:30 PM:** {evening_acts[0].capitalize()}{evening_restaurant}\n\n")
+                # Generate 4-5 time slots for comprehensive daily schedule (using safe emoji representations)
+                parts.append(f"- **8:00 AM - 10:00 AM:** {early_morning_acts[0].capitalize()}{early_morning_attraction}\n")
+                parts.append(f"- **10:30 AM - 1:00 PM:** {mid_morning_acts[0].capitalize()}{mid_morning_attraction}\n")
+                parts.append(f"- **2:00 PM - 4:30 PM:** {afternoon_acts[0].capitalize()}{afternoon_attraction}\n")
+                parts.append(f"- **5:00 PM - 6:30 PM:** {late_afternoon_acts[0].capitalize()}{late_afternoon_attraction}\n")
+                parts.append(f"- **7:30 PM - 9:30 PM:** {evening_acts[0].capitalize()}{evening_restaurant}\n\n")
         
         # Travel Tips
-        parts.append("---\n\n## 💡 Travel Tips\n\n")
+        parts.append("---\n\n## Travel Tips\n\n")
         parts.append(f"- **Best time to visit:** Check seasonal weather for {destination}\n")
         parts.append(f"- **Getting around:** Use local transport, ride-sharing apps, or rent vehicles\n")
         parts.append(f"- **Currency:** Bring local currency and cards\n")
@@ -1430,17 +1444,17 @@ Thought: {agent_scratchpad}""")
         parts.append(f"- **Safety:** Keep valuables secure, stay in well-lit areas\n\n")
         
         # Budget Breakdown
-        parts.append("## 💰 Budget Estimate\n\n")
+        parts.append("## Budget Estimate\n\n")
         budget_num = self._extract_budget_number(budget)
         
-        parts.append(f"- 🏨 **Accommodation:** ${budget_num * 0.4:.0f}/day (${budget_num * 0.4 * days:.0f} total)\n")
-        parts.append(f"- 🍽️ **Food & Dining:** ${budget_num * 0.3:.0f}/day (${budget_num * 0.3 * days:.0f} total)\n")
-        parts.append(f"- 🎯 **Activities:** ${budget_num * 0.2:.0f}/day (${budget_num * 0.2 * days:.0f} total)\n")
-        parts.append(f"- 🚕 **Transport:** ${budget_num * 0.1:.0f}/day (${budget_num * 0.1 * days:.0f} total)\n\n")
-        parts.append(f"**💵 Total Estimated Budget:** ${budget_num * days}\n\n")
+        parts.append(f"- **Accommodation:** ${budget_num * 0.4:.0f}/day (${budget_num * 0.4 * days:.0f} total)\n")
+        parts.append(f"- **Food & Dining:** ${budget_num * 0.3:.0f}/day (${budget_num * 0.3 * days:.0f} total)\n")
+        parts.append(f"- **Activities:** ${budget_num * 0.2:.0f}/day (${budget_num * 0.2 * days:.0f} total)\n")
+        parts.append(f"- **Transport:** ${budget_num * 0.1:.0f}/day (${budget_num * 0.1 * days:.0f} total)\n\n")
+        parts.append(f"**Total Estimated Budget:** ${budget_num * days}\n\n")
         
         # Packing List
-        parts.append("## 🎒 Suggested Packing List\n\n")
+        parts.append("## Suggested Packing List\n\n")
         packing = ["Comfortable walking shoes", "Weather-appropriate clothing", "Camera/phone for photos", 
                    "Travel adapter", "Basic first aid kit", "Sunscreen and sunglasses", "Reusable water bottle"]
         
@@ -1452,7 +1466,7 @@ Thought: {agent_scratchpad}""")
         for item in packing:
             parts.append(f"- {item}\n")
         
-        parts.append(f"\n---\n\n**🎉 Ready for your {destination} adventure!** Have an amazing trip! 🌟")
+        parts.append(f"\n---\n\n**Ready for your {destination} adventure!** Have an amazing trip!")
         
         # Return plain text (no HTML conversion)
         itinerary_text = "".join(parts)

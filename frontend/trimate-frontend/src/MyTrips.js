@@ -77,6 +77,79 @@ const MyTrips = ({ onBackToHome }) => {
     setSelectedTrip(null);
   };
 
+  // Helper function to clean corrupted characters
+  const cleanCorruptedText = (text) => {
+    if (!text) return text;
+    
+    // Replace corrupted character sequences with proper emojis/text
+    let cleaned = text
+      // Common emoji patterns that get corrupted
+      .replace(/�\s*�/g, '🛬') // Plane landing
+      .replace(/�\s*�️/g, '🍽️') // Fork and knife
+      .replace(/�\s*�/g, '🗺️') // World map  
+      .replace(/☀\s*️/g, '☀️') // Sun
+      .replace(/�\s*�/g, '🎯') // Target
+      .replace(/�\s*�/g, '🛍️') // Shopping bags
+      .replace(/�\s*�/g, '📦') // Package
+      .replace(/✈\s*️/g, '✈️') // Airplane
+      .replace(/�\s*�/g, '🌙') // Moon
+      .replace(/�\s*�/g, '🌅') // Sunrise
+      // Common text patterns
+      .replace(/�\s*\*/g, '**') // Bold markers
+      .replace(/\*\s*�/g, '**') // Bold markers reverse
+      .replace(/�\s*C/g, 'C') // "Comfortable" word start
+      .replace(/�\s*W/g, 'W') // "Weather" word start  
+      .replace(/�\s*B/g, 'B') // "Best" word start
+      .replace(/�\s*S/g, 'S') // Various words starting with S
+      .replace(/�\s*R/g, 'R') // Various words starting with R
+      // Clean up remaining corruption
+      .replace(/�+/g, ' ') // Replace remaining corrupted chars with space
+      .replace(/\s{2,}/g, ' ') // Normalize multiple spaces
+      .trim();
+    
+    // Fix specific word splitting issues
+    const wordFixes = {
+      'C omfortable': 'Comfortable',
+      'W eather': 'Weather', 
+      'C amera': 'Camera',
+      'T ravel': 'Travel',
+      'B asic': 'Basic',
+      'S unscreen': 'Sunscreen',
+      'R eusable': 'Reusable',
+      'B each': 'Beach',
+      'W aterproof': 'Waterproof'
+    };
+    
+    Object.entries(wordFixes).forEach(([corrupted, proper]) => {
+      cleaned = cleaned.replace(new RegExp(corrupted, 'g'), proper);
+    });
+    
+    // COMPLETELY REMOVE unwanted content patterns
+    const removePatterns = [
+      /Best time to visit.*?\n/gi,
+      /Getting around.*?\n/gi,
+      /Currency.*?\n/gi,
+      /Language.*?\n/gi,
+      /Safety.*?\n/gi,
+      /Food & Dining.*?\$\d+.*?\n/gi,
+      /Comfortable walking shoes.*?\n/gi,
+      /Weather-appropriate clothing.*?\n/gi,
+      /Camera\/phone for photos.*?\n/gi,
+      /Travel adapter.*?\n/gi,
+      /Basic first aid kit.*?\n/gi,
+      /Sunscreen and sunglasses.*?\n/gi,
+      /Reusable water bottle.*?\n/gi,
+      /Beach towel.*?\n/gi,
+      /Waterproof bag.*?\n/gi
+    ];
+    
+    removePatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    return cleaned;
+  };
+
   const parseItinerary = (itinerary) => {
     // Handle array with nested structure
     if (Array.isArray(itinerary)) {
@@ -85,29 +158,66 @@ const MyTrips = ({ onBackToHome }) => {
         // Check if activities contain a single string with full itinerary
         if (itinerary[0].activities.length === 1 && typeof itinerary[0].activities[0] === 'object' && itinerary[0].activities[0].name) {
           // Extract the string and parse it
-          return parseItinerary(itinerary[0].activities[0].name);
+          return parseItinerary(cleanCorruptedText(itinerary[0].activities[0].name));
         }
       }
-      // If it's already properly structured, return as is
+      // If it's already properly structured, return as is but clean text
       if (itinerary.length > 1 || (itinerary.length === 1 && itinerary[0].day && itinerary[0].activities && itinerary[0].activities.length > 1)) {
-        return itinerary;
+        return itinerary.map(day => ({
+          ...day,
+          activities: day.activities ? day.activities.map(activity => cleanCorruptedText(activity)) : []
+        }));
       }
     }
     
     if (typeof itinerary === 'string') {
+      // Clean the text first
+      const cleanText = cleanCorruptedText(itinerary);
       // Parse string itinerary into structured format
       const days = [];
-      const dayMatches = itinerary.match(/\*\*Day \d+:.*?\*\*/g);
+      // Try multiple patterns for day headers
+      let dayMatches = cleanText.match(/\*\*Day \d+:.*?\*\*/g);
+      
+      // Fallback pattern for corrupted headers
+      if (!dayMatches || dayMatches.length === 0) {
+        dayMatches = cleanText.match(/Day \d+/g);
+      }
       
       if (dayMatches) {
         dayMatches.forEach((dayHeader, idx) => {
           const dayNum = idx + 1;
           const dayTitle = dayHeader.replace(/\*\*/g, '').trim();
           
-          // Find content between this day and the next day (or budget breakdown)
-          const startIdx = itinerary.indexOf(dayHeader);
-          const nextDayIdx = dayMatches[idx + 1] ? itinerary.indexOf(dayMatches[idx + 1]) : itinerary.indexOf('**Budget Breakdown:**');
-          const dayContent = itinerary.substring(startIdx + dayHeader.length, nextDayIdx > startIdx ? nextDayIdx : itinerary.length);
+          // Find content between this day and the next day (or any end marker)
+          const startIdx = cleanText.indexOf(dayHeader);
+          let endIdx = cleanText.length;
+          
+          // Look for next day first
+          if (dayMatches[idx + 1]) {
+            const nextDayIdx = cleanText.indexOf(dayMatches[idx + 1]);
+            if (nextDayIdx > startIdx) endIdx = nextDayIdx;
+          }
+          
+          // Look for section end markers to prevent mixing travel tips etc into activities
+          const endMarkers = [
+            '**Budget Breakdown:**', 
+            '## Budget Estimate', 
+            '## Travel Tips', 
+            '## Suggested Packing List',
+            '---', 
+            'Travel Tips',
+            'Budget Estimate',
+            'Packing List'
+          ];
+          
+          for (const marker of endMarkers) {
+            const markerIdx = cleanText.indexOf(marker);
+            if (markerIdx > startIdx && markerIdx < endIdx) {
+              endIdx = markerIdx;
+            }
+          }
+          
+          const dayContent = cleanText.substring(startIdx + dayHeader.length, endIdx);
           
           // Extract activities (lines that start with time)
           const activities = [];
@@ -115,10 +225,60 @@ const MyTrips = ({ onBackToHome }) => {
           
           lines.forEach(line => {
             line = line.trim();
-            if (line && !line.startsWith('**') && line.length > 0) {
-              // Clean up the line
+            
+            // Skip section headers and travel information that shouldn't be activities
+            const skipPatterns = [
+              // Section headers
+              'Travel Tips', 'Budget Estimate', 'Packing List', 'Suggested Packing List',
+              'Budget Breakdown', 'Total Estimated Budget', 'Ready for your', 'Have an amazing trip',
+              
+              // Travel advice patterns
+              'Best time to visit', 'Getting around', 'Currency', 'Language', 'Safety',
+              'Check seasonal weather', 'Use local transport', 'Bring local currency',
+              'Keep valuables secure', 'Learn basic local phrases', 'ride-sharing apps',
+              'rent vehicles', 'well-lit areas',
+              
+              // Budget items
+              'Accommodation:', 'Food & Dining:', 'Activities:', 'Transport:',
+              '/day (', 'total)', '/day ($', '$', 'per day',
+              
+              // Packing list items (exact matches)
+              'Comfortable walking shoes', 'Weather-appropriate clothing', 'Camera/phone for photos',
+              'Travel adapter', 'Basic first aid kit', 'Sunscreen and sunglasses', 'Reusable water bottle',
+              'Beach towel', 'Waterproof bag', 'Swimwear', 'Sports shoes', 'Quick-dry clothes',
+              'Action camera', 'Sandals', 'Hat', 'Insect repellent',
+              
+              // Partial matches for corrupted text
+              'omfortable walking', 'eather-appropriate', 'amera/phone', 'ravel adapter',
+              'asic first aid', 'unscreen and sun', 'eusable water', 'each towel',
+              'aterproof bag'
+            ];
+            
+            if (skipPatterns.some(pattern => line.includes(pattern))) {
+              return; // Skip this line
+            }
+            
+            // Skip lines that are clearly budget/tips/packing items (single words or short phrases)
+            if (line.length < 10 && !line.includes('AM') && !line.includes('PM') && !line.includes(':**')) {
+              return;
+            }
+            
+            // ULTRA AGGRESSIVE FILTERING: Only allow clear activities with time markers
+            if (line.match(/^\w+$/)) return; // Single words
+            if (line.match(/^\*+\s*$/)) return; // Just asterisks
+            if (line.includes('$')) return; // Any budget-related content
+            if (line.includes('/day')) return; // Budget patterns
+            if (line.includes('total)')) return; // Budget totals
+            if (line.length < 20) return; // Too short to be a meaningful activity
+            
+            // STRICT: Only include if it has time markers AND looks like an activity
+            const hasTimeMarker = line.includes('AM') || line.includes('PM') || line.includes(':**');
+            const isActivity = line.includes('Visit') || line.includes('Explore') || line.includes('Check out') ||
+                             line.includes('Depart') || line.includes('Arrive') || line.includes('shopping');
+            
+            if (hasTimeMarker && isActivity && !line.startsWith('**') && !line.startsWith('##') && !line.startsWith('•') && !line.startsWith('*')) {
               const cleanLine = line.replace(/→/g, '→').replace(/\s+/g, ' ').trim();
-              if (cleanLine) {
+              if (cleanLine && cleanLine.length > 20) {
                 activities.push(cleanLine);
               }
             }
@@ -130,6 +290,85 @@ const MyTrips = ({ onBackToHome }) => {
             activities: activities
           });
         });
+      }
+      
+      // If no days parsed, try alternative parsing for corrupted text
+      if (days.length === 0) {
+        // Look for "Day X" pattern but stop at section markers
+        const alternativeMatches = cleanText.match(/Day \d+[\s\S]*?(?=Day \d+|\d+ Activities|## Travel Tips|## Budget Estimate|## Suggested Packing List|Travel Tips|Budget Estimate|Packing List|$)/g);
+        
+        if (alternativeMatches) {
+          alternativeMatches.forEach((daySection, idx) => {
+            const dayNum = idx + 1;
+            
+            // Extract activities from this section
+            const activities = [];
+            const lines = daySection.split('\n');
+            
+            lines.forEach(line => {
+              line = line.trim();
+              
+              // Skip section headers and travel information that shouldn't be activities
+              const skipPatterns = [
+                // Section headers
+                'Travel Tips', 'Budget Estimate', 'Packing List', 'Suggested Packing List',
+                'Budget Breakdown', 'Total Estimated Budget', 'Ready for your', 'Have an amazing trip',
+                
+                // Travel advice patterns
+                'Best time to visit', 'Getting around', 'Currency', 'Language', 'Safety',
+                'Check seasonal weather', 'Use local transport', 'Bring local currency',
+                'Keep valuables secure', 'Learn basic local phrases', 'ride-sharing apps',
+                'rent vehicles', 'well-lit areas',
+                
+                // Budget items
+                'Accommodation:', 'Food & Dining:', 'Activities:', 'Transport:',
+                '/day (', 'total)', '/day ($', '$', 'per day',
+                
+                // Packing list items (exact matches)
+                'Comfortable walking shoes', 'Weather-appropriate clothing', 'Camera/phone for photos',
+                'Travel adapter', 'Basic first aid kit', 'Sunscreen and sunglasses', 'Reusable water bottle',
+                'Beach towel', 'Waterproof bag', 'Swimwear', 'Sports shoes', 'Quick-dry clothes',
+                'Action camera', 'Sandals', 'Hat', 'Insect repellent',
+                
+                // Partial matches for corrupted text
+                'omfortable walking', 'eather-appropriate', 'amera/phone', 'ravel adapter',
+                'asic first aid', 'unscreen and sun', 'eusable water', 'each towel',
+                'aterproof bag'
+              ];
+              
+              if (skipPatterns.some(pattern => line.includes(pattern))) {
+                return; // Skip this line
+              }
+              
+              // ULTRA STRICT: Only include time-based activities
+              const hasTimeMarker = line.includes(':**') || line.includes('AM') || line.includes('PM');
+              const hasActivityMarker = line.startsWith('🛬') || line.startsWith('🍽️') || line.startsWith('🗺️') ||
+                                      line.startsWith('☀️') || line.startsWith('🎯') || line.startsWith('🛍️');
+              const isActivity = line.includes('Visit') || line.includes('Explore') || line.includes('Check out') ||
+                               line.includes('Depart') || line.includes('Arrive') || line.includes('shopping');
+              
+              if ((hasTimeMarker || hasActivityMarker) && isActivity) {
+                const cleanActivity = line
+                  .replace(/^\*+|\*+$/g, '') // Remove asterisks
+                  .replace(/^Day \d+\s*/, '') // Remove day prefix
+                  .replace(/^\d+\s*Activities?\s*/, '') // Remove activity count
+                  .trim();
+                
+                if (cleanActivity && cleanActivity.length > 20) { // Must be substantial
+                  activities.push(cleanActivity);
+                }
+              }
+            });
+            
+            if (activities.length > 0) {
+              days.push({
+                day: dayNum,
+                title: `Day ${dayNum}`,
+                activities: activities
+              });
+            }
+          });
+        }
       }
       
       return days.length > 0 ? days : null;

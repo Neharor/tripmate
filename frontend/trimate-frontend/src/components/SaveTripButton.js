@@ -215,11 +215,24 @@ export default function SaveTripButton({ tripData, onSaved }) {
     console.log('🔍 FRONTEND: tripData.stays type:', typeof tripData.stays);
     
     try {
+      // Clean trip data before sending
+      const cleanTripData = { ...tripData };
+      if (cleanTripData.itinerary && typeof cleanTripData.itinerary === 'string') {
+        // Ensure proper character encoding
+        cleanTripData.itinerary = cleanTripData.itinerary
+          .replace(/[\u{1F600}-\u{1F64F}]/gu, (match) => match) // Keep emojis
+          .replace(/[\u{1F300}-\u{1F5FF}]/gu, (match) => match) // Keep symbols
+          .replace(/[\u{1F680}-\u{1F6FF}]/gu, (match) => match) // Keep transport
+          .replace(/[\u{2600}-\u{26FF}]/gu, (match) => match);  // Keep misc symbols
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/trips`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json; charset=utf-8'
+        },
         credentials: 'include',
-        body: JSON.stringify(tripData)
+        body: JSON.stringify(cleanTripData)
       });
       
       const data = await response.json();

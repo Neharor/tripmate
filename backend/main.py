@@ -25,6 +25,7 @@ from routes.trending import init_trending_routes  # Import trending routes
 
 load_dotenv()
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False  # Enable UTF-8 support in JSON responses
 app.secret_key = os.getenv("SECRET_KEY", "tripmate-secret-key-change-in-production")
 CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
 

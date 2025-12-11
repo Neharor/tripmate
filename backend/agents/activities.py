@@ -21,16 +21,20 @@ MISSION: Recommend curated, bookable activities that match user interests."""
         try:
             input_lower = input_data.lower()
             
-            # Extract destination, interests, and budget
+            # Extract destination, interests, budget, companions, and dietary preferences
             destination = self._extract_destination(input_lower)
             interests = self._extract_interests(input_lower)
             budget = self._extract_budget(input_lower)
+            companions = self._extract_companions(input_lower)
+            dietary = self._extract_dietary(input_lower)
             
-            # Search for real activities using the service
+            # Search for real activities using the service with user context
             activities_list = activities_service.search_activities(
                 destination=destination,
                 interests=interests,
                 budget=budget,
+                companions=companions,
+                dietary_preferences=dietary,
                 limit=5
             )
             
@@ -71,10 +75,15 @@ MISSION: Recommend curated, bookable activities that match user interests."""
         """Extract interests from user input"""
         interests_map = {
             'beach': ['water', 'sightseeing'],
-            'food': ['food', 'dining'],
-            'culture': ['culture'],
-            'adventure': ['adventure'],
-            'night': ['nightlife']
+            'food': ['food', 'culture'],  # Food lovers also like culture
+            'culture': ['culture', 'sightseeing', 'history'],  # Culture includes sightseeing and history
+            'adventure': ['adventure', 'nature'],
+            'night': ['nightlife'],  # Keep nightlife separate
+            'nightlife': ['nightlife'],
+            'nature': ['nature', 'sightseeing'],  # Nature includes outdoor sightseeing
+            'history': ['history', 'culture', 'sightseeing'],  # History includes culture and sightseeing
+            'shopping': ['shopping'],
+            'art': ['culture', 'sightseeing']
         }
         
         interests = []
@@ -82,7 +91,38 @@ MISSION: Recommend curated, bookable activities that match user interests."""
             if keyword in input_lower:
                 interests.extend(categories)
         
+        # Always include sightseeing as base activity for any trip
+        if 'sightseeing' not in interests:
+            interests.append('sightseeing')
+        
         return list(set(interests))
+    
+    def _extract_companions(self, input_lower: str) -> str:
+        """Extract travel companion type from input"""
+        if any(word in input_lower for word in ['couple', 'partner', 'spouse', 'romantic']):
+            return 'couple'
+        elif any(word in input_lower for word in ['family', 'kids', 'children']):
+            return 'family_kids'
+        elif any(word in input_lower for word in ['friends', 'group']):
+            return 'friends'
+        elif any(word in input_lower for word in ['solo', 'alone', 'myself']):
+            return 'solo'
+        elif any(word in input_lower for word in ['business', 'work']):
+            return 'business'
+        return None
+    
+    def _extract_dietary(self, input_lower: str) -> list:
+        """Extract dietary preferences from input"""
+        dietary = []
+        if 'vegetarian' in input_lower:
+            dietary.append('vegetarian')
+        if 'vegan' in input_lower:
+            dietary.append('vegan')
+        if 'gluten' in input_lower:
+            dietary.append('gluten-free')
+        if 'kosher' in input_lower:
+            dietary.append('kosher')
+        return dietary
     
     def _extract_budget(self, input_lower: str) -> str:
         """Extract budget from user input"""

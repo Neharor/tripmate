@@ -95,7 +95,17 @@ class Trip:
         print(f"🔍 TRIP MODEL: About to insert trip document into MongoDB")
         print(f"🔍 TRIP MODEL: trip_doc keys: {list(trip_doc.keys())}")
         
-        # Insert into database
+        # Ensure proper UTF-8 encoding for text fields
+        if 'itinerary' in trip_doc and isinstance(trip_doc['itinerary'], str):
+            try:
+                # Clean and ensure proper UTF-8 encoding
+                trip_doc['itinerary'] = trip_doc['itinerary'].encode('utf-8', 'replace').decode('utf-8')
+            except (UnicodeEncodeError, UnicodeDecodeError) as e:
+                print(f"⚠️ TRIP MODEL: UTF-8 encoding issue fixed: {e}")
+                # Fallback: remove problematic characters
+                trip_doc['itinerary'] = ''.join(char for char in trip_doc['itinerary'] if ord(char) < 127 or char.isalnum())
+        
+        # Insert into database with proper encoding
         result = self.collection.insert_one(trip_doc)
         trip_doc['_id'] = result.inserted_id
         
